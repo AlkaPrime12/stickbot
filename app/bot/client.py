@@ -34,6 +34,7 @@ class StickBot(commands.Bot):
         self.tree.add_command(profile)
         self.tree.add_command(leaderboard)
         self.tree.add_command(match)
+        self.tree.add_command(stickconfig_cmd)
         await self.tree.sync()
 
 
@@ -60,12 +61,55 @@ async def on_guild_join(guild: discord.Guild):
         pass
 
 
-def _in_config_channel(interaction: discord.Interaction, key: str) -> bool:
+def _channel_config_allows(interaction: discord.Interaction, key: str) -> bool:
+    """None/vacío = cualquier canal. Un ID o CSV de IDs (texto Discord)."""
     if not interaction.guild:
         return False
     cfg = bot.guild_cfg_service.get_or_default(str(interaction.guild.id))
-    channel_id = cfg.get(key)
-    return channel_id is None or int(channel_id) == interaction.channel_id
+    raw = cfg.get(key)
+    if raw is None or str(raw).strip() == "":
+        return True
+    cur = str(interaction.channel_id)
+    for part in str(raw).replace(";", ",").split(","):
+        p = part.strip()
+        if p and p == cur:
+            return True
+    return False
+
+
+def _stickconfig_admin(interaction: discord.Interaction, cfg: dict) -> bool:
+    if interaction.user.guild_permissions.administrator:
+        return True
+    admins = [x.strip() for x in (cfg.get("bot_admin_ids") or "").split(",") if x.strip()]
+    return str(interaction.user.id) in admins
+
+
+@app_commands.command(name="stickconfig", description="Muestra la config del servidor leída de la base (sin caché en el bot).")
+async def stickconfig_cmd(interaction: discord.Interaction):
+    if not interaction.guild:
+        await interaction.response.send_message(_fmt(interaction, "error", "Solo en servidor."), ephemeral=True)
+        return
+    gid = str(interaction.guild.id)
+    cfg = bot.guild_cfg_service.get_or_default(gid)
+    if not _stickconfig_admin(interaction, cfg):
+        await interaction.response.send_message(
+            _fmt(interaction, "error", "Solo administradores del servidor o IDs en bot_admin_ids."),
+            ephemeral=True,
+        )
+        return
+    lines = [
+        "Lee directo de SQLite al ejecutar comandos.",
+        "Si no coincide con la web, revisá mismo DATABASE_PATH + volumen (Railway).",
+        f"buzón={cfg.get('channel_buzon_id')}",
+        f"registro={cfg.get('channel_registro_id')}",
+        f"historial={cfg.get('channel_historial_id')}",
+        f"general={cfg.get('channel_general_id')}",
+        f"búsqueda={cfg.get('channel_busqueda_id')}",
+        f"cmd /partida require={cfg.get('cmd_partida_require_channel')} csv={cfg.get('cmd_partida_allowed_channels')}",
+        f"cmd /registrar require={cfg.get('cmd_registrar_require_channel')} csv={cfg.get('cmd_registrar_allowed_channels')}",
+        f"ANSI preset={cfg.get('ansi_preset')}",
+    ]
+    await interaction.response.send_message(_fmt(interaction, "info", "\n".join(lines)), ephemeral=True)
 
 
 def _command_allowed(interaction: discord.Interaction, cmd_key: str, channel_key: str) -> tuple[bool, str]:
@@ -81,7 +125,7 @@ def _command_allowed(interaction: discord.Interaction, cmd_key: str, channel_key
         if allowed:
             if str(interaction.channel_id) not in allowed:
                 return False, "cmd_restringido_csv"
-        elif not _in_config_channel(interaction, channel_key):
+        elif not _channel_config_allows(interaction, channel_key):
             return False, "cmd_restringido_canal"
     return True, ""
 

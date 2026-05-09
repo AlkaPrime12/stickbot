@@ -7,6 +7,11 @@
   <p><a href="/auth/login">Login con Discord</a></p>
 </div>
 {% endif %}
+{% if login_ok %}
+<div class="card" style="border-color:#15803d;background:#052e16">
+  <p><strong>Listo:</strong> sesión iniciada con Discord. <a href="/setup">Ir a Servidores / Manage</a>.</p>
+</div>
+{% endif %}
 {% if login_error %}
 <div class="card" style="border-color:#b45309;background:#1c1917">
   {% if login_error == 'bad_state' %}

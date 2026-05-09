@@ -68,8 +68,9 @@ Servicios:
 3. Login Discord desde el panel.
 4. Elegir servidor (guild).
 5. **Manage** por servidor (`/setup/{guild_id}`): General, canales, límites, políticas por comando, OCR/MMR, apariencia ANSI.
-   - Manual: pegar IDs de canales/rol o usar validación API (`POST /api/guilds/{id}/config/validate`).
-   - Automático: el bot crea categoría + canales + rol.
+   - Canales: lista multiselección (API del bot) que rellena CSV de IDs; también podés editar el CSV a mano. Los cinco canales “principales” aceptan varios IDs.
+   - Validación API: `POST /api/guilds/{id}/config/validate`.
+   - Automático: reutiliza categoría **StickBot** y canales `stick-*` si ya existen.
 6. Probar comandos en Discord según políticas (`enabled` / `require_channel` / CSV).
 
 ## 6) Comandos de bot
@@ -81,6 +82,7 @@ Slash commands principales:
 - `/partida`
 - `/perfil`
 - `/stickleaderboard`
+- `/stickconfig` (solo administradores o IDs en `bot_admin_ids`): muestra un resumen de la config leída de la base en ese momento (sirve para comprobar que web y bot usan la misma SQLite).
 
 ## 7) Scripts operativos
 
@@ -98,11 +100,13 @@ Slash commands principales:
 - `GET/PUT /api/guilds/{guild_id}/config` — lectura/escritura de `guild_config`.
 - `GET/PUT /api/guilds/{guild_id}/message-templates` — plantillas de texto del bot (claves en [app/message_defaults.py](app/message_defaults.py)).
 - `POST /api/guilds/{guild_id}/config/validate` — comprueba IDs de canal contra Discord (token del **bot**).
+- `GET /api/guilds/{guild_id}/discord-channels` — sesión OAuth + admin del guild; lista canales de texto vía token del bot (para el selector del panel Manage).
 - `GET /leaderboard` — página **Leaderboard global** (todos los servidores).
 - `GET /api/leaderboard/global` — JSON del ranking global (`guild_player_stats`).
 
 ## 9) Notas
 
+- **Railway / varios procesos:** el panel solo escribe en `DATABASE_PATH` y el bot solo lee de la misma ruta en disco. Si desplegás **web** y **bot** en dos servicios, definí **`DATABASE_PATH` idéntica** en ambos (por ejemplo mismo volumen persistente montado). Si `/stickconfig` en Discord no coincide con lo que ves en Manage, están usando archivos SQLite distintos.
 - **MMR por servidor:** tabla `guild_player_stats`; `/stickleaderboard` solo lista el guild actual; la web global agrega todos los servidores.
 - MMR en partidas usa `mmr_k_factor` y `host_penalty_percent` por servidor.
 - OCR: márgenes y umbrales desde Manage; **nunca** se puntúa partida sin imagen → OCR.

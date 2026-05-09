@@ -22,6 +22,11 @@
   }
   .save-bar button { font-size:1rem; padding:12px 22px; }
   .save-bar .hint { margin: 8px 0 0; font-size: 0.85rem; color:#94a3b8; }
+  .ch-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 14px; }
+  .ch-row .ch-csv-in { flex: 1 1 200px; min-width: 180px; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  .ch-row .ch-multi, .ch-row .ch-multi-cmd { flex: 2 1 280px; min-width: 260px; max-width: 100%; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 6px; }
+  .ch-field .micro { font-size: 0.78rem; color: #94a3b8; margin: 2px 0 6px; }
+  .ocr-grid label { display: block; margin-top: 10px; font-weight: 600; }
 </style>
 {% endblock %}
 {% block content %}
@@ -67,13 +72,48 @@
 
     <div id="tab-canales" class="tab-panel" role="tabpanel">
       <div class="manage-section">
-        <h4>Canales (IDs de Discord)</h4>
-        <p class="muted">Pegá los IDs numéricos. Tras guardar, el bot usa esta config al instante.</p>
-        <label>Canal Buzón ID</label><input name="channel_buzon_id" value="{{ config.channel_buzon_id or '' }}">
-        <label>Canal Registro ID</label><input name="channel_registro_id" value="{{ config.channel_registro_id or '' }}">
-        <label>Canal Historial ID</label><input name="channel_historial_id" value="{{ config.channel_historial_id or '' }}">
-        <label>Canal General ID</label><input name="channel_general_id" value="{{ config.channel_general_id or '' }}">
-        <label>Canal Búsqueda ID</label><input name="channel_busqueda_id" value="{{ config.channel_busqueda_id or '' }}">
+        <h4>Canales</h4>
+        <p class="muted">Elegí uno o varios canales de la lista (API del bot). Los IDs se guardan como CSV. Podés editar el campo de texto a mano.</p>
+        <div class="ch-field">
+          <label>Canal Buzón</label>
+          <p class="micro">Capturas de <code>/partida</code> (OCR) cuando restringís a este canal.</p>
+          <div class="ch-row">
+            <input class="ch-csv-in" data-ch-field="channel_buzon_id" name="channel_buzon_id" value="{{ config.channel_buzon_id or '' }}" placeholder="IDs separados por coma">
+            <select multiple class="ch-multi" data-ch-target="channel_buzon_id" size="8" aria-label="Seleccionar canales buzón"></select>
+          </div>
+        </div>
+        <div class="ch-field">
+          <label>Canal Registro</label>
+          <p class="micro">Referencia para <code>/registrar</code> y <code>/renombrar</code> si usás “solo canal principal”.</p>
+          <div class="ch-row">
+            <input class="ch-csv-in" data-ch-field="channel_registro_id" name="channel_registro_id" value="{{ config.channel_registro_id or '' }}" placeholder="IDs separados por coma">
+            <select multiple class="ch-multi" data-ch-target="channel_registro_id" size="8" aria-label="Seleccionar canales registro"></select>
+          </div>
+        </div>
+        <div class="ch-field">
+          <label>Canal Historial</label>
+          <p class="micro">Referencia para <code>/stickleaderboard</code> con restricción por canal.</p>
+          <div class="ch-row">
+            <input class="ch-csv-in" data-ch-field="channel_historial_id" name="channel_historial_id" value="{{ config.channel_historial_id or '' }}" placeholder="IDs separados por coma">
+            <select multiple class="ch-multi" data-ch-target="channel_historial_id" size="8" aria-label="Seleccionar canales historial"></select>
+          </div>
+        </div>
+        <div class="ch-field">
+          <label>Canal General</label>
+          <p class="micro">Referencia para <code>/perfil</code> con restricción por canal principal.</p>
+          <div class="ch-row">
+            <input class="ch-csv-in" data-ch-field="channel_general_id" name="channel_general_id" value="{{ config.channel_general_id or '' }}" placeholder="IDs separados por coma">
+            <select multiple class="ch-multi" data-ch-target="channel_general_id" size="8" aria-label="Seleccionar canal general"></select>
+          </div>
+        </div>
+        <div class="ch-field">
+          <label>Canal Búsqueda</label>
+          <p class="micro">Referencias de canal para flujos de búsqueda / matchmaking del bot.</p>
+          <div class="ch-row">
+            <input class="ch-csv-in" data-ch-field="channel_busqueda_id" name="channel_busqueda_id" value="{{ config.channel_busqueda_id or '' }}" placeholder="IDs separados por coma">
+            <select multiple class="ch-multi" data-ch-target="channel_busqueda_id" size="8" aria-label="Seleccionar canales búsqueda"></select>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -96,42 +136,90 @@
         <h5>/registrar</h5>
         <label>enabled (1/0)</label><input name="cmd_registrar_enabled" type="number" min="0" max="1" value="{{ config.cmd_registrar_enabled }}">
         <label>require_channel (1/0)</label><input name="cmd_registrar_require_channel" type="number" min="0" max="1" value="{{ config.cmd_registrar_require_channel }}">
-        <label>Canales permitidos (CSV de IDs)</label><input name="cmd_registrar_allowed_channels" value="{{ config.cmd_registrar_allowed_channels or '' }}">
+        <label>Canales permitidos</label>
+        <div class="ch-row">
+          <input class="ch-csv-in" data-ch-field="cmd_registrar_allowed_channels" name="cmd_registrar_allowed_channels" value="{{ config.cmd_registrar_allowed_channels or '' }}" placeholder="CSV o multiselección">
+          <select multiple class="ch-multi-cmd" data-ch-target="cmd_registrar_allowed_channels" size="6" aria-label="Canales permitidos registrar"></select>
+        </div>
 
         <h5>/renombrar</h5>
         <label>enabled (1/0)</label><input name="cmd_renombrar_enabled" type="number" min="0" max="1" value="{{ config.cmd_renombrar_enabled }}">
         <label>require_channel (1/0)</label><input name="cmd_renombrar_require_channel" type="number" min="0" max="1" value="{{ config.cmd_renombrar_require_channel }}">
-        <label>Canales permitidos (CSV)</label><input name="cmd_renombrar_allowed_channels" value="{{ config.cmd_renombrar_allowed_channels or '' }}">
+        <label>Canales permitidos</label>
+        <div class="ch-row">
+          <input class="ch-csv-in" data-ch-field="cmd_renombrar_allowed_channels" name="cmd_renombrar_allowed_channels" value="{{ config.cmd_renombrar_allowed_channels or '' }}" placeholder="CSV o multiselección">
+          <select multiple class="ch-multi-cmd" data-ch-target="cmd_renombrar_allowed_channels" size="6" aria-label="Canales permitidos renombrar"></select>
+        </div>
 
         <h5>/perfil</h5>
         <label>enabled (1/0)</label><input name="cmd_perfil_enabled" type="number" min="0" max="1" value="{{ config.cmd_perfil_enabled }}">
         <label>require_channel (1/0)</label><input name="cmd_perfil_require_channel" type="number" min="0" max="1" value="{{ config.cmd_perfil_require_channel }}">
-        <label>Canales permitidos (CSV)</label><input name="cmd_perfil_allowed_channels" value="{{ config.cmd_perfil_allowed_channels or '' }}">
+        <label>Canales permitidos</label>
+        <div class="ch-row">
+          <input class="ch-csv-in" data-ch-field="cmd_perfil_allowed_channels" name="cmd_perfil_allowed_channels" value="{{ config.cmd_perfil_allowed_channels or '' }}" placeholder="CSV o multiselección">
+          <select multiple class="ch-multi-cmd" data-ch-target="cmd_perfil_allowed_channels" size="6" aria-label="Canales permitidos perfil"></select>
+        </div>
 
         <h5>/stickleaderboard</h5>
         <label>enabled (1/0)</label><input name="cmd_stickleaderboard_enabled" type="number" min="0" max="1" value="{{ config.cmd_stickleaderboard_enabled }}">
         <label>require_channel (1/0)</label><input name="cmd_stickleaderboard_require_channel" type="number" min="0" max="1" value="{{ config.cmd_stickleaderboard_require_channel }}">
-        <label>Canales permitidos (CSV)</label><input name="cmd_stickleaderboard_allowed_channels" value="{{ config.cmd_stickleaderboard_allowed_channels or '' }}">
+        <label>Canales permitidos</label>
+        <div class="ch-row">
+          <input class="ch-csv-in" data-ch-field="cmd_stickleaderboard_allowed_channels" name="cmd_stickleaderboard_allowed_channels" value="{{ config.cmd_stickleaderboard_allowed_channels or '' }}" placeholder="CSV o multiselección">
+          <select multiple class="ch-multi-cmd" data-ch-target="cmd_stickleaderboard_allowed_channels" size="6" aria-label="Canales permitidos leaderboard"></select>
+        </div>
 
         <h5>/partida</h5>
         <label>enabled (1/0)</label><input name="cmd_partida_enabled" type="number" min="0" max="1" value="{{ config.cmd_partida_enabled }}">
         <label>require_channel (1/0)</label><input name="cmd_partida_require_channel" type="number" min="0" max="1" value="{{ config.cmd_partida_require_channel }}">
-        <label>Canales permitidos (CSV)</label><input name="cmd_partida_allowed_channels" value="{{ config.cmd_partida_allowed_channels or '' }}">
+        <label>Canales permitidos</label>
+        <div class="ch-row">
+          <input class="ch-csv-in" data-ch-field="cmd_partida_allowed_channels" name="cmd_partida_allowed_channels" value="{{ config.cmd_partida_allowed_channels or '' }}" placeholder="CSV o multiselección">
+          <select multiple class="ch-multi-cmd" data-ch-target="cmd_partida_allowed_channels" size="6" aria-label="Canales permitidos partida"></select>
+        </div>
       </div>
     </div>
 
     <div id="tab-ocr" class="tab-panel" role="tabpanel">
-      <div class="manage-section">
+      <div class="manage-section ocr-grid">
         <h4>OCR y MMR</h4>
-        <label>ocr_min_points</label><input name="ocr_min_points" type="number" value="{{ config.ocr_min_points }}">
-        <label>ocr_confidence_threshold</label><input name="ocr_confidence_threshold" type="number" step="0.01" value="{{ config.ocr_confidence_threshold }}">
-        <label>ocr_margin_percent</label><input name="ocr_margin_percent" type="number" step="0.1" value="{{ config.ocr_margin_percent|default(20) }}">
-        <label>ocr_center_confidence</label><input name="ocr_center_confidence" type="number" step="0.01" value="{{ config.ocr_center_confidence|default(0.25) }}">
-        <label>ocr_corner_confidence</label><input name="ocr_corner_confidence" type="number" step="0.01" value="{{ config.ocr_corner_confidence|default(0.10) }}">
-        <label>ocr_color_distance_max</label><input name="ocr_color_distance_max" type="number" step="0.1" value="{{ config.ocr_color_distance_max|default(170) }}">
-        <label>host_penalty_percent</label><input name="host_penalty_percent" type="number" step="0.1" value="{{ config.host_penalty_percent }}">
-        <label>mmr_k_factor</label><input name="mmr_k_factor" type="number" step="0.1" value="{{ config.mmr_k_factor|default(32) }}">
-        <label>partida_confirm_reaction (1 = reacción ✅ en el mensaje)</label><input name="partida_confirm_reaction" type="number" min="0" max="1" value="{{ config.partida_confirm_reaction|default(0) }}">
+        <p class="muted">La captura se recorta y se leen números (OCR); si la confianza o los colores fallan, ajustá estos valores.</p>
+
+        <label>ocr_min_points</label>
+        <p class="micro">Puntuación mínima en la captura para aceptar un jugador como detectado (evita ruido).</p>
+        <input name="ocr_min_points" type="number" value="{{ config.ocr_min_points }}">
+
+        <label>ocr_confidence_threshold</label>
+        <p class="micro">Umbral global del motor OCR sobre cada lectura numérica antes de usarla para MMR.</p>
+        <input name="ocr_confidence_threshold" type="number" step="0.01" value="{{ config.ocr_confidence_threshold }}">
+
+        <label>ocr_margin_percent</label>
+        <p class="micro">Porcentaje de margen al recortar la zona de jugadores desde el borde del scoreboard.</p>
+        <input name="ocr_margin_percent" type="number" step="0.1" value="{{ config.ocr_margin_percent|default(20) }}">
+
+        <label>ocr_center_confidence</label>
+        <p class="micro">Confianza mínima para aceptar el bloque central de la imagen (host / núcleo del marcador).</p>
+        <input name="ocr_center_confidence" type="number" step="0.01" value="{{ config.ocr_center_confidence|default(0.25) }}">
+
+        <label>ocr_corner_confidence</label>
+        <p class="micro">Confianza mínima para aceptar lecturas esquina / zonas auxiliares de la cuadrícula.</p>
+        <input name="ocr_corner_confidence" type="number" step="0.01" value="{{ config.ocr_corner_confidence|default(0.10) }}">
+
+        <label>ocr_color_distance_max</label>
+        <p class="micro">Distancia máxima en espacio de color entre píxeles esperados vs leídos (filtro tipo “solo verde/azul marcador”).</p>
+        <input name="ocr_color_distance_max" type="number" step="0.1" value="{{ config.ocr_color_distance_max|default(170) }}">
+
+        <label>host_penalty_percent</label>
+        <p class="micro">Al marcar host en <code>/partida</code>, se descuentan estos % <strong>solo del puntaje del host</strong> antes de calcular deltas MMR (0 = sin penalizar).</p>
+        <input name="host_penalty_percent" type="number" step="0.1" value="{{ config.host_penalty_percent }}">
+
+        <label>mmr_k_factor</label>
+        <p class="micro">“K” efectivo por partida en el servidor: valores altos mueven más el rating por resultado.</p>
+        <input name="mmr_k_factor" type="number" step="0.1" value="{{ config.mmr_k_factor|default(32) }}">
+
+        <label>partida_confirm_reaction</label>
+        <p class="micro"><code>1</code>: el bot intenta agregar ✅ al mensaje de resultado.</p>
+        <input name="partida_confirm_reaction" type="number" min="0" max="1" value="{{ config.partida_confirm_reaction|default(0) }}">
       </div>
     </div>
 
@@ -171,7 +259,7 @@
     <div class="save-bar">
       <button type="submit">Guardar y aplicar al bot</button>
       <button type="button" id="btn-validate-ch" style="margin-left:10px;background:#0f766e">Validar canales (Discord API)</button>
-      <p class="hint">La configuración se guarda en la base de datos; el bot la aplica en el siguiente comando (no hace falta reiniciar el bot).</p>
+      <p class="hint">La configuración se guarda en la base de datos; el bot la aplica en el siguiente comando (sin caché). En Discord los admins pueden usar <code>/stickconfig</code> para ver lo que el bot está leyendo por guild.</p>
       <pre id="validate-out" style="display:none;margin-top:10px;background:#0b1220;padding:10px;border-radius:8px;font-size:0.8rem;max-height:180px;overflow:auto"></pre>
     </div>
   </form>
@@ -179,7 +267,7 @@
 
 <div class="card">
   <h3>Configuración automática en Discord</h3>
-  <p class="muted">Crea categoría, canales y rol si el bot tiene permisos.</p>
+  <p class="muted">Crea o reutiliza la categoría <strong>StickBot</strong>, canales <code>stick-*</code> y rol <strong>Buscando Partida</strong> si ya existen. Requiere permisos suficientes en el servidor.</p>
   <form method="post" action="/setup/{{ guild_id }}/auto">
     <button type="submit">Ejecutar setup automático</button>
   </form>
@@ -213,6 +301,50 @@
   }
   {% endif %}
   var gid = {{ guild_id|tojson }};
+  function syncSelectFromInput(sel) {
+    var fid = sel.getAttribute('data-ch-target');
+    var inp = document.querySelector('.ch-csv-in[data-ch-field="'+fid+'"]');
+    if (!inp) return;
+    var ids = (inp.value || '').split(/[,;\s]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+    Array.from(sel.options).forEach(function(o){ o.selected = ids.indexOf(o.value) !== -1; });
+  }
+  function wireChannelPickups() {
+    fetch('/api/guilds/'+encodeURIComponent(String(gid))+'/discord-channels', { credentials: 'same-origin' })
+      .then(function(r){
+        if (r.status === 401 || r.status === 403) return null;
+        if (!r.ok) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(channels){
+        if (!channels || !channels.length) return;
+        document.querySelectorAll('.ch-multi, .ch-multi-cmd').forEach(function(sel){
+          sel.innerHTML = '';
+          channels.forEach(function(ch){
+            var opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = '#' + ch.name;
+            sel.appendChild(opt);
+          });
+          syncSelectFromInput(sel);
+          sel.addEventListener('change', function(){
+            var target = sel.getAttribute('data-ch-target');
+            var inp = document.querySelector('.ch-csv-in[data-ch-field="'+target+'"]');
+            if (!inp) return;
+            inp.value = Array.from(sel.selectedOptions).map(function(o){ return o.value; }).join(',');
+          });
+        });
+        document.querySelectorAll('.ch-csv-in').forEach(function(inp){
+          inp.addEventListener('change', function(){
+            var fid = inp.getAttribute('data-ch-field');
+            var sel = document.querySelector('[data-ch-target="'+fid+'"]');
+            if (sel) syncSelectFromInput(sel);
+          });
+        });
+      })
+      .catch(function(){});
+  }
+  wireChannelPickups();
+
   var btnT = document.getElementById('btn-save-tpl');
   if (btnT) {
     btnT.addEventListener('click', async function(){

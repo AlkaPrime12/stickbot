@@ -3,7 +3,12 @@
 {% block content %}
 <div class="card">
   <h2>Servidores</h2>
-  {% if guilds_error and guilds_error != "no_token" %}
+  {% if guilds_error == "discord_http_429" %}
+    <p style="color:#fcd34d;padding:12px;background:#1c1917;border-radius:8px;border:1px solid #92400e;">
+      Discord aplicó un límite temporal de peticiones (<strong>429</strong>). Esperá unos segundos y pulsá recargar, o volvé desde <a href="/">Inicio</a> → Servidores.
+      <a href="/setup">Reintentar ahora</a> · <a href="/auth/login">Refrescar sesión</a>
+    </p>
+{% elif guilds_error and guilds_error != "no_token" %}
     <p style="color:#fca5a5;padding:12px;background:#1c1917;border-radius:8px;border:1px solid #7f1d1d;">
       No se pudieron cargar los servidores ({{ guilds_error }}).
       <a href="/auth/login">Iniciar sesión de nuevo</a>
@@ -21,7 +26,10 @@
   <input id="srv-q" type="search" placeholder="Filtrar por nombre..." autocomplete="off" style="max-width:100%">
   <ul id="srv-list" style="margin-top:12px;padding-left:20px;">
     {% for g in guilds %}
-      <li data-name="{{ (g.name or '')|lower }}"><a href="/setup/{{ g.id }}">{{ g.name or g.id }}</a></li>
+      <li data-name="{{ (g.name or '')|lower }}">
+        <a href="/setup/{{ g.id }}">{{ g.name or g.id }}</a>
+        {% if g.bot_present %}<span class="muted" title="El bot está en este servidor">StickBot ✓</span>{% endif %}
+      </li>
     {% endfor %}
   </ul>
   <p class="muted"><a href="/auth/login">Refrescar sesión Discord</a> · <a href="/">Inicio</a></p>

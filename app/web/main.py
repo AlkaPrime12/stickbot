@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -17,6 +19,9 @@ from app.services.guild_config_service import GuildConfigService
 from app.services.discord_setup_service import DiscordSetupService
 from app.services.message_template_service import MessageTemplateService
 
+logger = logging.getLogger(__name__)
+
+DISCORD_ADMIN_PERMISSION = 0x8  # Administrator
 
 def _session_https_only() -> bool:
     """
@@ -76,6 +81,7 @@ def _health_payload() -> dict:
     weak_session = settings.session_secret in ("", "change-this-session-secret")
     return {
         "status": "ok",
+        "database_path": settings.database_path,
         "bot_token_configured": bool(settings.discord_token),
         "oauth_client_configured": bool(settings.discord_client_id and settings.discord_client_secret),
         "oauth_redirect_uri": settings.discord_redirect_uri,
@@ -88,33 +94,111 @@ def _health_payload() -> dict:
 
 def _sanitize_csv_channels(s: str) -> str:
     parts = [p.strip() for p in (s or "").replace(";", ",").split(",")]
-    return ",".join(p for p in parts if p)
+    return ",".join(p for p in parts if p.isdigit())
+
+
+def _sanitize_optional_channel_field(s: str) -> str | None:
+    t = _sanitize_csv_channels(s or "")
+    return t if t else None
+
+
+def _guild_entry_admin(g: dict) -> bool:
+    try:
+        perm = int(g.get("permissions", 0))
+        return (perm & DISCORD_ADMIN_PERMISSION) == DISCORD_ADMIN_PERMISSION
+    except (TypeError, ValueError):
+        return False
 
 
 async def _fetch_discord_guild_list(request: Request) -> tuple[list[dict], str | None]:
     """
     Obtiene guilds desde la API de Discord (no guarda en sesión: evita superar el límite ~4KB del cookie).
+    Marca bot_present y ordena: primero servidores donde el bot está.
     """
     token = request.session.get("oauth_token")
     if not token:
         return [], "no_token"
+
+    guilds: list | None = None
+    last_status = 0
+    max_attempts = 4
     async with httpx.AsyncClient(timeout=25) as client:
+        for attempt in range(max_attempts):
+            r = await client.get(
+                "https://discord.com/api/v10/users/@me/guilds",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            last_status = r.status_code
+            if r.status_code == 401:
+                request.session.pop("oauth_token", None)
+                request.session.pop("guilds", None)
+                request.session.pop("user", None)
+                return [], "token_expired"
+            if r.status_code == 429 and attempt < max_attempts - 1:
+                try:
+                    wait = float(r.headers.get("Retry-After") or "1")
+                except ValueError:
+                    wait = 1.5
+                await asyncio.sleep(min(max(wait, 0.5), 8.0))
+                continue
+            if not r.is_success:
+                return [], f"discord_http_{r.status_code}"
+            guilds = r.json()
+            break
+
+    if guilds is None:
+        return [], f"discord_http_{last_status}"
+    if not isinstance(guilds, list):
+        return [], "invalid_response"
+
+    sem = asyncio.Semaphore(5)
+
+    async def mark_bot(g):
+        gid = str(g.get("id", ""))
+        if not gid:
+            return {**g, "bot_present": False}
+        async with sem:
+            try:
+                present = await discord_setup_service.bot_in_guild(gid)
+            except Exception:
+                logger.exception("bot_in_guild failed for %s", gid)
+                present = False
+        return {**g, "bot_present": present}
+
+    enriched = await asyncio.gather(*[mark_bot(g) for g in guilds])
+    enriched.sort(key=lambda x: ((not x.get("bot_present")), (x.get("name") or "").lower()))
+    return list(enriched), None
+
+
+PRIMARY_CHANNEL_FIELDS = frozenset(
+    {
+        "channel_buzon_id",
+        "channel_registro_id",
+        "channel_historial_id",
+        "channel_general_id",
+        "channel_busqueda_id",
+    }
+)
+
+
+async def _user_is_admin_of_guild(request: Request, guild_id: str) -> bool:
+    token = request.session.get("oauth_token")
+    if not token:
+        return False
+    async with httpx.AsyncClient(timeout=20) as client:
         r = await client.get(
             "https://discord.com/api/v10/users/@me/guilds",
             headers={"Authorization": f"Bearer {token}"},
         )
-        if r.status_code == 401:
-            request.session.pop("oauth_token", None)
-            request.session.pop("guilds", None)
-            request.session.pop("user", None)
-            return [], "token_expired"
-        if not r.is_success:
-            return [], f"discord_http_{r.status_code}"
+        if r.status_code != 200:
+            return False
         guilds = r.json()
     if not isinstance(guilds, list):
-        return [], "invalid_response"
-    guilds.sort(key=lambda g: (g.get("name") or "").lower())
-    return guilds, None
+        return False
+    for g in guilds:
+        if str(g.get("id")) == str(guild_id):
+            return _guild_entry_admin(g)
+    return False
 
 
 def _collect_channel_ids(payload: dict) -> list[str]:
@@ -129,7 +213,10 @@ def _collect_channel_ids(payload: dict) -> list[str]:
     for k in keys:
         v = payload.get(k)
         if v not in (None, "", 0, "0"):
-            out.append(str(v).strip())
+            for part in str(v).replace(";", ",").split(","):
+                p = part.strip()
+                if p.isdigit():
+                    out.append(p)
     for prefix in (
         "cmd_registrar",
         "cmd_renombrar",
@@ -169,8 +256,9 @@ async def home(request: Request):
             "user": user,
             "invite_url": _bot_invite_url(),
             "session_expired": login_msg == "expired",
-            "login_error": login_msg if login_msg and login_msg not in ("expired",) else None,
+            "login_error": login_msg if login_msg and login_msg not in ("expired", "ok") else None,
             "login_detail": request.query_params.get("detail", ""),
+            "login_ok": login_msg == "ok",
             "oauth_logged_in": oauth_logged_in,
             "redirect_uri_hint": settings.discord_redirect_uri,
             "oauth_configured": bool(settings.discord_client_id and settings.discord_client_secret),
@@ -179,30 +267,66 @@ async def home(request: Request):
     )
 
 
+def _normalize_lb_rows(rows) -> list[dict]:
+    out: list[dict] = []
+    for r in rows or []:
+        try:
+            mmr_val = float(r[3]) if r[3] is not None else 0.0
+        except (TypeError, ValueError):
+            mmr_val = 0.0
+        out.append(
+            {
+                "guild_id": r[0],
+                "guild_label": r[1] or r[0],
+                "player": r[2],
+                "mmr": mmr_val,
+            }
+        )
+    return out
+
+
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard_global_page(request: Request):
-    repo = PlayerRepository()
-    rows = repo.top_players_global(100)
-    total = repo.count_global_rows()
+    err = None
+    rows_d: list[dict] = []
+    total = 0
+    try:
+        repo = PlayerRepository()
+        rows = repo.top_players_global(100)
+        total = repo.count_global_rows()
+        rows_d = _normalize_lb_rows(rows)
+    except Exception as exc:
+        logger.exception("leaderboard_global_page failed")
+        err = type(exc).__name__
     return templates.TemplateResponse(
         "leaderboard_global.html",
-        context={"request": request, "rows": rows, "total": total},
+        context={
+            "request": request,
+            "rows": rows_d,
+            "total": total,
+            "leaderboard_error": err,
+            "database_path_hint": settings.database_path,
+        },
         request=request,
     )
 
 
 @app.get("/api/leaderboard/global")
 async def api_leaderboard_global(limit: int = 100, offset: int = 0):
-    repo = PlayerRepository()
-    rows = repo.top_players_global(min(limit, 500), offset)
-    total = repo.count_global_rows()
-    return {
-        "total": total,
-        "rows": [
-            {"guild_id": r[0], "guild_label": r[1], "player": r[2], "mmr": round(float(r[3]), 1)}
-            for r in rows
-        ],
-    }
+    try:
+        repo = PlayerRepository()
+        rows = repo.top_players_global(min(limit, 500), offset)
+        total = repo.count_global_rows()
+        return {
+            "total": total,
+            "rows": [
+                {"guild_id": r[0], "guild_label": r[1], "player": r[2], "mmr": round(float(r[3] if r[3] is not None else 0), 1)}
+                for r in rows
+            ],
+        }
+    except Exception as exc:
+        logger.exception("api_leaderboard_global failed")
+        return JSONResponse({"error": "leaderboard_failed", "detail": type(exc).__name__}, status_code=500)
 
 
 @app.get("/overview", response_class=HTMLResponse)
@@ -290,19 +414,14 @@ async def auth_callback(
                 "https://discord.com/api/users/@me",
                 headers={"Authorization": f"Bearer {token}"},
             )
-            guilds_resp = await client.get(
-                "https://discord.com/api/users/@me/guilds",
-                headers={"Authorization": f"Bearer {token}"},
-            )
             user_resp.raise_for_status()
-            guilds_resp.raise_for_status()
     except Exception:
         return RedirectResponse("/?login=token_exchange_failed")
 
     request.session["oauth_token"] = token
     request.session["user"] = user_resp.json()
     request.session.pop("guilds", None)
-    return RedirectResponse("/setup")
+    return RedirectResponse("/?login=ok")
 
 
 @app.get("/setup", response_class=HTMLResponse)
@@ -400,11 +519,11 @@ async def setup_manual(
             "guild_display_name": guild_display_name or "",
             "limits_apply_non_admin_only": limits_apply_non_admin_only,
             "bot_admin_ids": _sanitize_csv_channels(bot_admin_ids),
-            "channel_buzon_id": channel_buzon_id or None,
-            "channel_registro_id": channel_registro_id or None,
-            "channel_historial_id": channel_historial_id or None,
-            "channel_general_id": channel_general_id or None,
-            "channel_busqueda_id": channel_busqueda_id or None,
+            "channel_buzon_id": _sanitize_optional_channel_field(channel_buzon_id),
+            "channel_registro_id": _sanitize_optional_channel_field(channel_registro_id),
+            "channel_historial_id": _sanitize_optional_channel_field(channel_historial_id),
+            "channel_general_id": _sanitize_optional_channel_field(channel_general_id),
+            "channel_busqueda_id": _sanitize_optional_channel_field(channel_busqueda_id),
             "role_buscando_id": role_buscando_id or None,
             "cooldown_minutes": cooldown_minutes,
             "daily_limit": daily_limit,
@@ -477,6 +596,22 @@ async def api_get_guild_config(request: Request, guild_id: str):
     return guild_cfg_service.get_or_default(guild_id)
 
 
+@app.get("/api/guilds/{guild_id}/discord-channels")
+async def api_guild_discord_channels(request: Request, guild_id: str):
+    if "oauth_token" not in request.session:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not await _user_is_admin_of_guild(request, guild_id):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    if not settings.discord_token:
+        return JSONResponse({"error": "bot_token_missing"}, status_code=503)
+    try:
+        channels = await discord_setup_service.list_guild_text_channels(guild_id)
+    except Exception as exc:
+        logger.exception("list_guild_text_channels(%s)", guild_id)
+        return JSONResponse({"error": "discord_api", "detail": str(exc)}, status_code=502)
+    return channels
+
+
 @app.put("/api/guilds/{guild_id}/config")
 async def api_put_guild_config(request: Request, guild_id: str):
     if "oauth_token" not in request.session:
@@ -487,6 +622,9 @@ async def api_put_guild_config(request: Request, guild_id: str):
     for key in list(payload.keys()):
         if key.endswith("_allowed_channels") and isinstance(payload[key], str):
             payload[key] = _sanitize_csv_channels(payload[key])
+        if key in PRIMARY_CHANNEL_FIELDS and isinstance(payload[key], str):
+            t = _sanitize_csv_channels(payload[key])
+            payload[key] = t if t else None
     return guild_cfg_service.save(guild_id, payload)
 
 
