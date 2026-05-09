@@ -1,57 +1,75 @@
+from __future__ import annotations
+
 from app.db import get_connection
 
 
+_GPS_UPSERT = """
+INSERT INTO guild_player_stats (guild_id, discord_user_id, mmr)
+VALUES (:guild_id, :discord_user_id, :mmr)
+ON CONFLICT (guild_id, discord_user_id) DO UPDATE SET mmr = EXCLUDED.mmr
+"""
+
+_GPS_INSERT_IGNORE = """
+INSERT INTO guild_player_stats (guild_id, discord_user_id, mmr)
+VALUES (:guild_id, :discord_user_id, :mmr)
+ON CONFLICT (guild_id, discord_user_id) DO NOTHING
+"""
+
+
 class PlayerRepository:
+    def list_all_game_names(self) -> list[str]:
+        """Nombres de juego conocidos para matching OCR."""
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT nombre_juego FROM jugadores WHERE nombre_juego IS NOT NULL ORDER BY nombre_juego",
+                {},
+            ).fetchall()
+            return [str(r._mapping["nombre_juego"]) for r in rows if r._mapping.get("nombre_juego")]
+
     def get_by_discord_id(self, discord_id: str):
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT id_jugador, nombre_juego, mmr FROM jugadores WHERE id_jugador = ?",
-                (discord_id,),
+                "SELECT id_jugador, nombre_juego, mmr FROM jugadores WHERE id_jugador = :id",
+                {"id": discord_id},
             ).fetchone()
-            return row
+            return (row[0], row[1], row[2]) if row else None
 
     def get_by_game_name(self, game_name: str):
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT id_jugador, nombre_juego, mmr FROM jugadores WHERE nombre_juego = ?",
-                (game_name,),
+                "SELECT id_jugador, nombre_juego, mmr FROM jugadores WHERE nombre_juego = :name",
+                {"name": game_name},
             ).fetchone()
-            return row
+            return (row[0], row[1], row[2]) if row else None
 
     def get_mmr_for_guild(self, discord_id: str, guild_id: str) -> float | None:
         with get_connection() as conn:
             row = conn.execute(
                 """
                 SELECT mmr FROM guild_player_stats
-                WHERE guild_id = ? AND discord_user_id = ?
+                WHERE guild_id = :guild_id AND discord_user_id = :uid
                 """,
-                (str(guild_id), str(discord_id)),
+                {"guild_id": str(guild_id), "uid": str(discord_id)},
             ).fetchone()
-            return float(row[0]) if row else None
+            return float(row._mapping["mmr"]) if row else None
 
     def create_player(self, discord_id: str, game_name: str, guild_id: str | None = None):
         with get_connection() as conn:
             conn.execute(
-                "INSERT INTO jugadores (id_jugador, nombre_juego) VALUES (?, ?)",
-                (discord_id, game_name),
+                "INSERT INTO jugadores (id_jugador, nombre_juego) VALUES (:id, :name)",
+                {"id": discord_id, "name": game_name},
             )
             if guild_id:
                 conn.execute(
-                    """
-                    INSERT OR REPLACE INTO guild_player_stats (guild_id, discord_user_id, mmr)
-                    VALUES (?, ?, 400.0)
-                    """,
-                    (str(guild_id), str(discord_id)),
+                    _GPS_UPSERT,
+                    {"guild_id": str(guild_id), "discord_user_id": str(discord_id), "mmr": 400.0},
                 )
 
     def ensure_guild_stat(self, guild_id: str, discord_id: str, default_mmr: float = 400.0):
         with get_connection() as conn:
             conn.execute(
-                """
-                INSERT OR IGNORE INTO guild_player_stats (guild_id, discord_user_id, mmr)
-                VALUES (?, ?, ?)
-                """,
-                (str(guild_id), str(discord_id), default_mmr),
+                _GPS_INSERT_IGNORE,
+                {"guild_id": str(guild_id), "discord_user_id": str(discord_id), "mmr": float(default_mmr)},
             )
 
     def ensure_player_in_guild(self, discord_id: str, guild_id: str) -> None:
@@ -59,49 +77,47 @@ class PlayerRepository:
         with get_connection() as conn:
             ex = conn.execute(
                 """
-                SELECT 1 FROM guild_player_stats
-                WHERE guild_id = ? AND discord_user_id = ?
+                SELECT 1 AS x FROM guild_player_stats
+                WHERE guild_id = :guild_id AND discord_user_id = :uid
                 """,
-                (str(guild_id), str(discord_id)),
+                {"guild_id": str(guild_id), "uid": str(discord_id)},
             ).fetchone()
             if ex:
                 return
             j = conn.execute(
-                "SELECT mmr FROM jugadores WHERE id_jugador = ?",
-                (str(discord_id),),
+                "SELECT mmr FROM jugadores WHERE id_jugador = :uid",
+                {"uid": str(discord_id)},
             ).fetchone()
-            mmr = float(j[0]) if j else 400.0
+            mmr = float(j._mapping["mmr"]) if j else 400.0
             conn.execute(
-                """
-                INSERT INTO guild_player_stats (guild_id, discord_user_id, mmr)
-                VALUES (?, ?, ?)
-                """,
-                (str(guild_id), str(discord_id), mmr),
+                _GPS_INSERT_IGNORE,
+                {"guild_id": str(guild_id), "discord_user_id": str(discord_id), "mmr": mmr},
             )
 
     def rename_player(self, discord_id: str, game_name: str):
         with get_connection() as conn:
             conn.execute(
-                "UPDATE jugadores SET nombre_juego = ? WHERE id_jugador = ?",
-                (game_name, discord_id),
+                "UPDATE jugadores SET nombre_juego = :name WHERE id_jugador = :id",
+                {"name": game_name, "id": discord_id},
             )
 
     def update_mmr_global(self, discord_id: str, mmr: float):
         """Legacy: sincroniza jugadores.mmr por compat. Preferir update_mmr_guild."""
         with get_connection() as conn:
             conn.execute(
-                "UPDATE jugadores SET mmr = ? WHERE id_jugador = ?",
-                (mmr, discord_id),
+                "UPDATE jugadores SET mmr = :mmr WHERE id_jugador = :id",
+                {"mmr": mmr, "id": discord_id},
             )
 
     def update_mmr_guild(self, guild_id: str, discord_id: str, mmr: float):
         with get_connection() as conn:
             conn.execute(
-                """
-                INSERT OR REPLACE INTO guild_player_stats (guild_id, discord_user_id, mmr)
-                VALUES (?, ?, ?)
-                """,
-                (str(guild_id), str(discord_id), float(mmr)),
+                _GPS_UPSERT,
+                {
+                    "guild_id": str(guild_id),
+                    "discord_user_id": str(discord_id),
+                    "mmr": float(mmr),
+                },
             )
 
     def top_players(self, limit: int = 15, guild_id: str | None = None, offset: int = 0):
@@ -112,25 +128,25 @@ class PlayerRepository:
                     SELECT j.nombre_juego, gs.mmr
                     FROM guild_player_stats gs
                     JOIN jugadores j ON j.id_jugador = gs.discord_user_id
-                    WHERE gs.guild_id = ?
+                    WHERE gs.guild_id = :guild_id
                     ORDER BY gs.mmr DESC
-                    LIMIT ? OFFSET ?
+                    LIMIT :lim OFFSET :off
                     """,
-                    (str(guild_id), limit, offset),
+                    {"guild_id": str(guild_id), "lim": limit, "off": offset},
                 ).fetchall()
             else:
                 rows = conn.execute(
                     """
-                    SELECT j.nombre_juego, mmr FROM jugadores ORDER BY mmr DESC LIMIT ? OFFSET ?
+                    SELECT nombre_juego, mmr FROM jugadores ORDER BY mmr DESC LIMIT :lim OFFSET :off
                     """,
-                    (limit, offset),
+                    {"lim": limit, "off": offset},
                 ).fetchall()
-            return rows
+            return [tuple(r) for r in rows]
 
     def top_players_global(self, limit: int = 50, offset: int = 0):
         """Ranking mundial: todas las filas guild_player_stats (un jugador puede aparecer en varios guilds)."""
         with get_connection() as conn:
-            return conn.execute(
+            rows = conn.execute(
                 """
                 SELECT gs.guild_id,
                     CASE
@@ -142,12 +158,21 @@ class PlayerRepository:
                 JOIN jugadores j ON j.id_jugador = gs.discord_user_id
                 LEFT JOIN guild_config gc ON gc.guild_id = gs.guild_id
                 ORDER BY gs.mmr DESC
-                LIMIT ? OFFSET ?
+                LIMIT :lim OFFSET :off
                 """,
-                (limit, offset),
+                {"lim": limit, "off": offset},
             ).fetchall()
+            return [
+                (
+                    r._mapping["guild_id"],
+                    r._mapping["gname"],
+                    r._mapping["nombre_juego"],
+                    r._mapping["mmr"],
+                )
+                for r in rows
+            ]
 
     def count_global_rows(self) -> int:
         with get_connection() as conn:
-            row = conn.execute("SELECT COUNT(*) FROM guild_player_stats").fetchone()
-            return int(row[0]) if row else 0
+            row = conn.execute("SELECT COUNT(*) AS c FROM guild_player_stats", {}).fetchone()
+            return int(row._mapping["c"]) if row else 0

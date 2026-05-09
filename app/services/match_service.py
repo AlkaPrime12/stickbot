@@ -3,6 +3,12 @@ import datetime
 from app.db import get_connection
 from app.domain.mmr import calcular_cambios_mmr
 
+_GPS_ENSURE = """
+INSERT INTO guild_player_stats (guild_id, discord_user_id, mmr)
+VALUES (:guild_id, :discord_user_id, 400.0)
+ON CONFLICT (guild_id, discord_user_id) DO NOTHING
+"""
+
 
 class MatchService:
     def persist_match(
@@ -28,65 +34,69 @@ class MatchService:
             mmr_actuales = {}
             for jugador in adjusted:
                 row = conn.execute(
-                    "SELECT id_jugador FROM jugadores WHERE nombre_juego = ?",
-                    (jugador,),
+                    "SELECT id_jugador FROM jugadores WHERE nombre_juego = :name",
+                    {"name": jugador},
                 ).fetchone()
                 if not row:
                     continue
-                discord_uid = row[0]
+                discord_uid = row._mapping["id_jugador"]
                 conn.execute(
-                    """
-                    INSERT OR IGNORE INTO guild_player_stats (guild_id, discord_user_id, mmr)
-                    VALUES (?, ?, 400.0)
-                    """,
-                    (gid, str(discord_uid)),
+                    _GPS_ENSURE,
+                    {"guild_id": gid, "discord_user_id": str(discord_uid)},
                 )
                 r2 = conn.execute(
                     """
                     SELECT mmr FROM guild_player_stats
-                    WHERE guild_id = ? AND discord_user_id = ?
+                    WHERE guild_id = :guild_id AND discord_user_id = :uid
                     """,
-                    (gid, str(discord_uid)),
+                    {"guild_id": gid, "uid": str(discord_uid)},
                 ).fetchone()
-                mmr_actuales[jugador] = float(r2[0]) if r2 else 400.0
+                mmr_actuales[jugador] = float(r2._mapping["mmr"]) if r2 else 400.0
 
             cambios = calcular_cambios_mmr(adjusted, mmr_actuales, k_factor=k_factor)
-            conn.execute(
-                "INSERT INTO partidas (fecha, guild_id) VALUES (?, ?)",
-                (str(datetime.datetime.now()), gid),
-            )
-            id_partida = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            now = datetime.datetime.now()
+            rid = conn.execute(
+                """
+                INSERT INTO partidas (fecha, guild_id) VALUES (:fecha, :guild_id)
+                RETURNING id_partida
+                """,
+                {"fecha": now.isoformat(timespec="seconds"), "guild_id": gid},
+            ).scalar_one()
+            id_partida = int(rid)
 
             for jugador, puntos in adjusted.items():
                 row = conn.execute(
-                    "SELECT id_jugador FROM jugadores WHERE nombre_juego = ?",
-                    (jugador,),
+                    "SELECT id_jugador FROM jugadores WHERE nombre_juego = :name",
+                    {"name": jugador},
                 ).fetchone()
                 if not row:
                     continue
-                discord_id = row[0]
+                discord_id = row._mapping["id_jugador"]
                 conn.execute(
-                    """
-                    INSERT OR IGNORE INTO guild_player_stats (guild_id, discord_user_id, mmr)
-                    VALUES (?, ?, 400.0)
-                    """,
-                    (gid, str(discord_id)),
+                    _GPS_ENSURE,
+                    {"guild_id": gid, "discord_user_id": str(discord_id)},
                 )
                 nuevo_mmr = mmr_actuales[jugador] + cambios[jugador]
                 conn.execute(
                     """
-                    UPDATE guild_player_stats SET mmr = ?
-                    WHERE guild_id = ? AND discord_user_id = ?
+                    UPDATE guild_player_stats SET mmr = :mmr
+                    WHERE guild_id = :guild_id AND discord_user_id = :uid
                     """,
-                    (nuevo_mmr, gid, str(discord_id)),
+                    {"mmr": nuevo_mmr, "guild_id": gid, "uid": str(discord_id)},
                 )
                 conn.execute(
-                    "UPDATE jugadores SET mmr = ? WHERE id_jugador = ?",
-                    (nuevo_mmr, str(discord_id)),
+                    """
+                    UPDATE jugadores SET mmr = :mmr WHERE id_jugador = :id
+                    """,
+                    {"mmr": nuevo_mmr, "id": str(discord_id)},
                 )
                 conn.execute(
-                    "INSERT INTO detalles_partida (id_partida, id_jugador, puntos) VALUES (?, ?, ?)",
-                    (id_partida, discord_id, puntos),
+                    """
+                    INSERT INTO detalles_partida (id_partida, id_jugador, puntos)
+                    VALUES (:id_partida, :id_jugador, :puntos)
+                    """,
+                    {"id_partida": id_partida, "id_jugador": discord_id, "puntos": puntos},
                 )
 
         return adjusted, cambios

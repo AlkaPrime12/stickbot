@@ -11,8 +11,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import settings
+from app.config import settings, uses_postgresql
+from app.database_engine import dialect_name
 from app.db import get_connection
+from app.runtime_migrate import ensure_schema
 from app.message_defaults import MESSAGE_TEMPLATE_KEYS, MESSAGE_TEMPLATE_HELP
 from app.repositories.player_repository import PlayerRepository
 from app.services.guild_config_service import GuildConfigService
@@ -43,10 +45,8 @@ def _session_https_only() -> bool:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """Misma BD que el bot: crea tablas y migraciones al levantar el panel (Railway / Docker)."""
-    from database import inicializar_db
-
-    inicializar_db(settings.database_path)
+    """Misma BD que el bot: Alembic en Postgres o bootstrap SQLite según entorno."""
+    await asyncio.to_thread(ensure_schema)
     yield
 
 
@@ -65,6 +65,8 @@ message_template_service = MessageTemplateService()
 
 def _health_payload() -> dict:
     sample_err = None
+    alembic_rev = None
+    backend = dialect_name()
     try:
         with get_connection() as conn:
             row = conn.execute(
@@ -72,15 +74,26 @@ def _health_payload() -> dict:
                 SELECT guild_id, last_ocr_error FROM guild_config
                 WHERE last_ocr_error IS NOT NULL AND trim(last_ocr_error) != ''
                 LIMIT 1
-                """
+                """,
+                {},
             ).fetchone()
             if row:
                 sample_err = {"guild_id": row[0], "message": (row[1] or "")[:300]}
+            if backend == "postgresql":
+                try:
+                    v = conn.execute("SELECT version_num FROM alembic_version", {}).fetchone()
+                    alembic_rev = str(v[0]) if v else None
+                except Exception:
+                    alembic_rev = None
     except Exception:
         pass
     weak_session = settings.session_secret in ("", "change-this-session-secret")
     return {
         "status": "ok",
+        "database_backend": backend,
+        "database_url_configured": uses_postgresql(),
+        "database_url_safe_host": settings.database_url_safe_label,
+        "alembic_revision": alembic_rev,
         "database_path": settings.database_path,
         "bot_token_configured": bool(settings.discord_token),
         "oauth_client_configured": bool(settings.discord_client_id and settings.discord_client_secret),
@@ -306,6 +319,8 @@ async def leaderboard_global_page(request: Request):
             "total": total,
             "leaderboard_error": err,
             "database_path_hint": settings.database_path,
+            "database_url_safe_label": settings.database_url_safe_label,
+            "uses_postgresql": uses_postgresql(),
         },
         request=request,
     )

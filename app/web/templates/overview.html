@@ -10,6 +10,14 @@
     <li>Redirect URI: <code>{{ health.oauth_redirect_uri }}</code></li>
     <li>APP_BASE_URL: <code>{{ health.app_base_url }}</code></li>
     <li>Session secret fuerte: {% if health.session_secret_strong %}sí{% else %}<strong style="color:#fbbf24">cambiar SESSION_SECRET</strong>{% endif %}</li>
+    <li>Base de datos: <code>{{ health.database_backend }}</code>
+      {% if health.database_url_configured %}
+        — Postgres (<code>{{ health.database_url_safe_host or 'configured' }}</code>)
+        {% if health.alembic_revision %} — migración <code>{{ health.alembic_revision }}</code>{% endif %}
+      {% else %}
+        — SQLite local <code>{{ health.database_path }}</code>
+      {% endif %}
+    </li>
   </ul>
   <p><a href="{{ invite_url }}">Invitar bot</a> · <a href="/auth/login">Login Discord</a></p>
 </div>

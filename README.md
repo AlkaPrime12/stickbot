@@ -1,11 +1,11 @@
 # StickBot Discord (Web + Bot)
 
-StickBot ahora incluye:
+StickBot incluye:
 
 - Bot Discord para Stick Fight (MMR, OCR, ranking, LFG).
 - Panel web para configurar cada servidor Discord.
-- Setup manual o automatico de canales/rol.
-- Despliegue rapido con Docker Compose.
+- Setup manual o automático de canales/rol.
+- **Base unificada (estilo Carl-bot):** Postgres vía **`DATABASE_URL`** compartido entre panel y bot, o modo legado SQLite con **`DATABASE_PATH`**.
 
 ## 1) Requisitos
 
@@ -13,7 +13,7 @@ StickBot ahora incluye:
 - App de Discord creada en Developer Portal
 - `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`
 
-## 2) Configuracion
+## 2) Configuración
 
 Copiar variables base:
 
@@ -21,7 +21,11 @@ Copiar variables base:
 python scripts/bootstrap.py
 ```
 
-Editar `.env` y completar:
+Editar `.env` — ver [`.env.example`](.env.example). Resumen:
+
+- **`DATABASE_URL` (recomendado en Railway / prod):** URL Postgres. **Definir la misma en el servicio web y en el servicio bot.** Al iniciar ambos ejecutan Alembic (`ensure_schema`).
+- **`DATABASE_PATH`:** sólo cuando `DATABASE_URL` está vacío (SQLite local o legado sobre archivo).
+- **Pool Postgres (opcional):** `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT`.
 
 ```env
 DISCORD_TOKEN=
@@ -30,36 +34,39 @@ DISCORD_CLIENT_SECRET=
 DISCORD_REDIRECT_URI=http://localhost:8000/auth/callback
 APP_BASE_URL=http://localhost:8000
 SESSION_SECRET=change-this-secret
-# Producción HTTPS: cookies de sesión seguras
-# ENV=production
-# SESSION_HTTPS_ONLY=1
+# DATABASE_URL=postgresql://...
 DATABASE_PATH=stickbot.db
+DEFAULT_DAILY_LIMIT=3
+DEFAULT_COOLDOWN_MINUTES=22
 GIT_AUTO_SYNC=0
 GIT_AUTO_SYNC_REMOTE=origin
 GIT_AUTO_SYNC_BRANCH=main
 GIT_AUTO_SYNC_MESSAGE=auto-sync run_all
 ```
 
-## 3) Instalacion local (sin Docker)
+## 3) Instalación local (sin Docker)
 
 ```bash
 pip install -r requirements.txt
+# Sin DATABASE_URL — SQLite como antes:
 python scripts/migrate.py
+# Con Postgres: export DATABASE_URL=... ; luego
+alembic upgrade head
 python run_all.py
 ```
 
-Esto inicia web + bot al mismo tiempo.
+Esto puede iniciar web + bot según tus scripts locales.
 
-## 4) Instalacion con Docker Compose (recomendada)
+## 4) Postgres local con Compose (opcional)
 
 ```bash
+docker compose --profile postgres up postgres -d
+# Ejemplo DATABASE_URL contra el contenedor (ajustá credenciales a tu .env):
+# DATABASE_URL=postgresql://stickbot:stickbot@127.0.0.1:5432/stickbot
 docker compose up --build
 ```
 
-Servicios:
-
-- Web panel: `http://localhost:8000`
-- Bot: corre en contenedor `bot`
+Dos servicios en la misma imagen pueden usar comandos distintos: ver comentarios en [`Dockerfile`](Dockerfile).
 
 ## 5) Flujo de setup
 
@@ -67,51 +74,47 @@ Servicios:
 2. Invitar bot al servidor.
 3. Login Discord desde el panel.
 4. Elegir servidor (guild).
-5. **Manage** por servidor (`/setup/{guild_id}`): General, canales, límites, políticas por comando, OCR/MMR, apariencia ANSI.
-   - Canales: lista multiselección (API del bot) que rellena CSV de IDs; también podés editar el CSV a mano. Los cinco canales “principales” aceptan varios IDs.
-   - Validación API: `POST /api/guilds/{id}/config/validate`.
-   - Automático: reutiliza categoría **StickBot** y canales `stick-*` si ya existen.
-6. Probar comandos en Discord según políticas (`enabled` / `require_channel` / CSV).
+5. **Manage** (`/setup/{guild_id}`): General, canales, límites, políticas por comando, OCR/MMR, apariencia ANSI.
+6. Verificar **`/stickconfig`** en Discord y el panel muestran la misma config (debajo: misma **`DATABASE_URL`** o misma **`DATABASE_PATH`** si no usás Postgres).
 
 ## 6) Comandos de bot
 
-Slash commands principales:
-
-- `/registrar`
-- `/renombrar`
-- `/partida`
-- `/perfil`
-- `/stickleaderboard`
-- `/stickconfig` (solo administradores o IDs en `bot_admin_ids`): muestra un resumen de la config leída de la base en ese momento (sirve para comprobar que web y bot usan la misma SQLite).
+Slash commands principales: `/registrar`, `/renombrar`, `/partida`, `/perfil`, `/stickleaderboard`, **`/stickconfig`** (solo administradores del servidor o IDs en `bot_admin_ids`) — muestra la config efectiva desde la base en ese momento.
 
 ## 7) Scripts operativos
 
-- `python scripts/migrate.py`
-- `python scripts/seed.py`
-- `python scripts/start.py`
-- `python scripts/backup.py`
-- `python run_all.py` (web + bot juntos)
-- `GIT_AUTO_SYNC=1 python run_all.py` (auto add/commit/push en inicio)
+- `python scripts/migrate.py` — migraciones SQLite (legado archivo).
+- `alembic upgrade head` — esquema Postgres (también se ejecuta solo al iniciar si hay `DATABASE_URL`).
+- [`scripts/sqlite_to_postgres.py`](scripts/sqlite_to_postgres.py) — copiar datos SQLite → Postgres tras `alembic upgrade head`; `--dry-run` para revisar cantidades.
+- `python scripts/seed.py`, `python scripts/start.py`, `python scripts/backup.py`, `python run_all.py`
 
-## 8) API de gestión (resumen)
+## 8) Railway (Postgres recomendado)
 
-- `GET /health` — estado del despliegue, token bot, OAuth, muestra opcional de último error OCR en BD.
-- `GET /api/guilds` — requiere sesión OAuth; lista guilds del usuario.
-- `GET/PUT /api/guilds/{guild_id}/config` — lectura/escritura de `guild_config`.
-- `GET/PUT /api/guilds/{guild_id}/message-templates` — plantillas de texto del bot (claves en [app/message_defaults.py](app/message_defaults.py)).
-- `POST /api/guilds/{guild_id}/config/validate` — comprueba IDs de canal contra Discord (token del **bot**).
-- `GET /api/guilds/{guild_id}/discord-channels` — sesión OAuth + admin del guild; lista canales de texto vía token del bot (para el selector del panel Manage).
-- `GET /leaderboard` — página **Leaderboard global** (todos los servidores).
-- `GET /api/leaderboard/global` — JSON del ranking global (`guild_player_stats`).
+1. Crear addon **PostgreSQL** y copiar `DATABASE_URL` (interna o público según región/red).
+2. Pegar **`DATABASE_URL` idéntica** en los servicios **StickBot Web** y **StickBot Bot** (Railway permite la misma variable referenciando el recurso Postgres).
+3. Redeploy: al arrancar se aplica **`alembic upgrade head`**.
+4. Migrar datos desde una SQLite vieja: `scripts/sqlite_to_postgres.py` contra la URL del addon (véase `--help`).
+5. Comprobar `GET /health`: `database_backend`, `database_url_safe_host`, `alembic_revision`.
 
-## 9) Notas
+Backups/restores: [`docs/postgres_backup.md`](docs/postgres_backup.md).
 
-- **Railway / varios procesos:** el panel solo escribe en `DATABASE_PATH` y el bot solo lee de la misma ruta en disco. Si desplegás **web** y **bot** en dos servicios, definí **`DATABASE_PATH` idéntica** en ambos (por ejemplo mismo volumen persistente montado). Si `/stickconfig` en Discord no coincide con lo que ves en Manage, están usando archivos SQLite distintos.
-- **MMR por servidor:** tabla `guild_player_stats`; `/stickleaderboard` solo lista el guild actual; la web global agrega todos los servidores.
-- MMR en partidas usa `mmr_k_factor` y `host_penalty_percent` por servidor.
-- OCR: márgenes y umbrales desde Manage; **nunca** se puntúa partida sin imagen → OCR.
-- Mensajes ANSI (`ansi_preset`): bloques ```ansi```; mejor en Discord escritorio. Referencia de colores: [Rebane](https://rebane2001.com/discord-colored-text-generator).
-- Nunca commitear `.env` ni exponer token/secret en el panel.
-- `docs/config_map.md`, `docs/ocr_flow.md`, `docs/extensibility_slash.md` — referencia rápida.
-- `docs/current_logic_spec.md` documenta el comportamiento baseline.
-- `docs/qa_checklist.md` lista pruebas de regresión recomendadas.
+## 9) Cutover rápido (SQLite → Postgres)
+
+1. **`pg_dump` / export** de la SQLite con el script copy o hacer dump lógico vía [`scripts/sqlite_to_postgres.py`](scripts/sqlite_to_postgres.py) hacia Postgres **vacío** ya migrado.
+2. Actualizar **`DATABASE_URL`** en **web + bot**.
+3. Redeploy ambos procesos.
+4. Smoke: `GET /health`, guardar un cambio en **Manage**, comprobar `/stickconfig` y una **partida OCR** opcional si tenés OCR habilitado.
+
+## 10) API de gestión (resumen)
+
+- `GET /health` — backend (`postgresql|sqlite`), host seguro derivado de la URL sin contraseña, revisión Alembic en Postgres, token bot, OAuth, muestra opcional último error OCR.
+- REST de guilds, plantillas de mensajes, validate, discord-channels — ver sección equivalente anterior en el código.
+
+## 11) Otros enlaces de documentación
+
+- `docs/config_map.md`, `docs/ocr_flow.md`, `docs/extensibility_slash.md`
+- `docs/current_logic_spec.md` — comportamiento baseline
+- `docs/qa_checklist.md` — regresión manual
+- `docs/sql_style.md`, `docs/sql_audit.md`, `docs/schema_parity.md`
+
+**Notas:** MMR por servidor → `guild_player_stats`. Nunca commitear `.env`. Producción recomendada: **un solo Postgres** en lugar de dos archivos SQLite en volúmenes distintos.

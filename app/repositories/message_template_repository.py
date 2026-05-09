@@ -1,30 +1,36 @@
-import sqlite3
+from __future__ import annotations
 
 from app.db import get_connection
+
+
+_MT_UPSERT = """
+INSERT INTO guild_message_templates (guild_id, template_key, body)
+VALUES (:guild_id, :template_key, :body)
+ON CONFLICT (guild_id, template_key) DO UPDATE SET body = EXCLUDED.body
+"""
 
 
 class MessageTemplateRepository:
     def get(self, guild_id: str, template_key: str) -> str | None:
         with get_connection() as conn:
-            conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
                 SELECT body FROM guild_message_templates
-                WHERE guild_id = ? AND template_key = ?
+                WHERE guild_id = :guild_id AND template_key = :template_key
                 """,
-                (str(guild_id), template_key),
+                {"guild_id": str(guild_id), "template_key": template_key},
             ).fetchone()
             if not row:
                 return None
-            return str(row["body"])
+            return str(row._mapping["body"])
 
     def get_all_for_guild(self, guild_id: str) -> dict[str, str]:
         with get_connection() as conn:
             rows = conn.execute(
-                "SELECT template_key, body FROM guild_message_templates WHERE guild_id = ?",
-                (str(guild_id),),
+                "SELECT template_key, body FROM guild_message_templates WHERE guild_id = :gid",
+                {"gid": str(guild_id)},
             ).fetchall()
-            return {r[0]: r[1] for r in rows}
+            return {r._mapping["template_key"]: r._mapping["body"] for r in rows}
 
     def upsert_many(self, guild_id: str, templates: dict[str, str]) -> None:
         gid = str(guild_id)
@@ -34,9 +40,6 @@ class MessageTemplateRepository:
                 if not key or len(str(body)) > 1900:
                     continue
                 conn.execute(
-                    """
-                    INSERT OR REPLACE INTO guild_message_templates (guild_id, template_key, body)
-                    VALUES (?, ?, ?)
-                    """,
-                    (gid, key, str(body)[:1900]),
+                    _MT_UPSERT,
+                    {"guild_id": gid, "template_key": key, "body": str(body)[:1900]},
                 )

@@ -42,7 +42,13 @@
 {% if leaderboard_error %}
 <div class="card" style="border-color:#b45309">
   <p><strong>No se pudo cargar el ranking.</strong> Error interno (<code>{{ leaderboard_error }}</code>).</p>
-  <p class="muted">Si usás Railway con web y bot en servicios distintos, usá la <strong>misma</strong> ruta SQLite (<code>DATABASE_PATH</code>) y mismo volumen. Ruta efectiva panel: <code>{{ database_path_hint }}</code>.</p>
+  <p class="muted">
+    {% if uses_postgresql %}
+      Panel y bot deben compartir la <strong>misma</strong> variable <code>DATABASE_URL</code> (Railway Postgres). Resumen seguro: <code>{{ database_url_safe_label or '(no label)' }}</code>
+    {% else %}
+      Si tenés web y bot en servicios distintos sin Postgres, usá la misma ruta SQLite (<code>DATABASE_PATH</code>) y el mismo volumen. Ruta efectiva del panel: <code>{{ database_path_hint }}</code>.
+    {% endif %}
+  </p>
 </div>
 {% endif %}
 
@@ -107,5 +113,12 @@
   <p class="muted">Aún no hay datos en <code>guild_player_stats</code>. Jugá partidas en Discord para poblar el ranking.</p>
   {% endif %}
   <p class="muted" style="margin-top:16px">En Discord, <code>/stickleaderboard</code> muestra solo el ranking de ese servidor.</p>
+  <p class="muted" style="margin-top:12px">
+    {% if uses_postgresql %}
+      Producción recomendada: un solo Postgres (Railway) con <code>DATABASE_URL</code> igual en ambos procesos — ver README.
+    {% else %}
+      Para evitar bases duplicadas en Railway, configurá Postgres y <code>DATABASE_URL</code> según README.
+    {% endif %}
+  </p>
 </div>
 {% endblock %}

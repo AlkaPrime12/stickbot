@@ -2,12 +2,14 @@
 
 ## Migraciones y base de datos
 
-- [ ] `python scripts/migrate.py` completa sin errores (desde la raíz del proyecto).
+- [ ] **Postgres:** `DATABASE_URL` definida; `alembic upgrade head` (o arranque web/bot) sin errores; `GET /health` muestra `database_backend: postgresql` y `alembic_revision`.
+- [ ] **SQLite legado:** `python scripts/migrate.py` completa sin errores (sin `DATABASE_URL`).
 - [ ] Tras migrar: existen tablas `guild_player_stats` y `guild_message_templates`; `partidas.guild_id` presente.
+- [ ] **Cutover:** misma `DATABASE_URL` en web y bot; `/stickconfig` coincide con Manage tras guardar; script `scripts/sqlite_to_postgres.py --dry-run` revisado antes de import real.
 
 ## Panel web y API
 
-- [ ] `GET /health` incluye `bot_token_configured`, `oauth_client_configured`, `session_secret_strong`, `sample_last_ocr_error` (opcional).
+- [ ] `GET /health` incluye `database_backend`, `database_url_configured` / `database_url_safe_host` (sin password), `alembic_revision` (Postgres), `bot_token_configured`, `oauth_client_configured`, `session_secret_strong`, `sample_last_ocr_error` (opcional).
 - [ ] OAuth login respeta `state`; callback rechaza estado inválido.
 - [ ] Tras login, `/setup` lista guilds y `/setup/{guild_id}` abre Manage.
 - [ ] Guardar Manage redirige con `?saved=1` y muestra toast.

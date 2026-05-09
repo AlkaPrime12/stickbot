@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import lector
-from app.config import settings
+from app.config import settings, uses_postgresql
 from app.services.player_service import PlayerService
 from app.services.guild_config_service import GuildConfigService
 from app.services.match_service import MatchService
@@ -97,9 +97,17 @@ async def stickconfig_cmd(interaction: discord.Interaction):
             ephemeral=True,
         )
         return
-    lines = [
-        "Lee directo de SQLite al ejecutar comandos.",
-        "Si no coincide con la web, revisá mismo DATABASE_PATH + volumen (Railway).",
+    if uses_postgresql():
+        lines = [
+            f"BD: PostgreSQL ({settings.database_url_safe_label or 'DATABASE_URL'})",
+            "Misma URL en servicios web y bot (Railway). Si no coincide con Manage, revisá variables de entorno.",
+        ]
+    else:
+        lines = [
+            f"BD: SQLite — {settings.database_path}",
+            "Si no coincide con la web, revisá DATABASE_PATH idéntico y volumen compartido (Railway).",
+        ]
+    lines += [
         f"buzón={cfg.get('channel_buzon_id')}",
         f"registro={cfg.get('channel_registro_id')}",
         f"historial={cfg.get('channel_historial_id')}",
@@ -320,4 +328,7 @@ async def match(interaction: discord.Interaction, host: discord.Member | None = 
 def run_bot():
     if not settings.discord_token:
         raise RuntimeError("Falta DISCORD_TOKEN en entorno.")
+    from app.runtime_migrate import ensure_schema
+
+    ensure_schema()
     bot.run(settings.discord_token)

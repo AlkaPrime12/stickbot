@@ -10,3 +10,6 @@ python-multipart
 httpx
 pytest
 itsdangerous
+sqlalchemy>=2.0
+psycopg[binary]>=3.1
+alembic>=1.13

@@ -1,4 +1,17 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_USER: stickbot
+      POSTGRES_PASSWORD: stickbot
+      POSTGRES_DB: stickbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   web:
     build: .
     command: python run_web.py
@@ -20,3 +33,6 @@ services:
     volumes:
       - ./:/app
       - ./data:/app/data
+
+volumes:
+  pgdata: {}

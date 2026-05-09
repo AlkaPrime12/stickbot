@@ -2,7 +2,6 @@ import easyocr
 import cv2
 import difflib
 import math
-import sqlite3
 import os
 import numpy as np
 
@@ -37,7 +36,7 @@ def _resolve_db_path(db_path: str | None) -> str:
         return RUTA_DB
 
 
-def analizar_captura(imagen_bytes, db_path=None, ocr_options=None):
+def analizar_captura(imagen_bytes, db_path=None, ocr_options=None, jugadores_bd: list[str] | None = None):
     """
     OCR de captura de partida. ocr_options puede incluir:
     ocr_margin_percent, ocr_corner_confidence, ocr_center_confidence,
@@ -51,7 +50,10 @@ def analizar_captura(imagen_bytes, db_path=None, ocr_options=None):
     center_conf = max(center_conf_base, legacy_center)
     umbral_tol = float(opts.get("ocr_color_distance_max", 170.0))
 
-    db_file = _resolve_db_path(db_path)
+    if jugadores_bd is None:
+        from app.repositories.player_repository import PlayerRepository
+
+        jugadores_bd = PlayerRepository().list_all_game_names()
 
     nparr = np.frombuffer(imagen_bytes, np.uint8)
     imagen_original = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -78,12 +80,6 @@ def analizar_captura(imagen_bytes, db_path=None, ocr_options=None):
             if confianza > corner_conf and texto.isdigit() and len(texto) <= 2:
                 color = obtener_color_texto(zoom, caja)
                 datos_puntajes.append({"puntos": int(texto), "color": color})
-
-    conexion = sqlite3.connect(db_file)
-    cursor = conexion.cursor()
-    cursor.execute("SELECT nombre_juego FROM jugadores")
-    jugadores_bd = [fila[0] for fila in cursor.fetchall()]
-    conexion.close()
 
     centro = imagen_original[margen_y : alto - margen_y, 0:ancho]
     resultados_centro = lector.readtext(centro)

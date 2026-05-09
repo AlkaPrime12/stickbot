@@ -45,7 +45,7 @@ This document freezes current behavior so the modular rewrite keeps the same pro
   - `partidas`
   - `detalles_partida`
   - `limite_diario`
-- Current DB engine: SQLite (`stickbot.db`).
+- DB engine: PostgreSQL vía `DATABASE_URL` (compartido web+bot) o SQLite local con `DATABASE_PATH` si no hay URL.
 
 ## Configuration currently hardcoded
 

@@ -1,3 +1,10 @@
+"""
+LEGACY — bot monolítico con sqlite3 acoplado. No usar en despliegues nuevos.
+
+Arquitectura actual: `python run_bot.py` → `app/bot/client.py`, compartiendo Postgres o SQLite según `.env`.
+
+Ver README (DATABASE_URL / DATABASE_PATH), `docs/sql_audit.md`.
+"""
 import discord
 from discord.ext import commands
 import os

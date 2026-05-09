@@ -1,0 +1,7 @@
+Migraciones Postgres (Alembic). Requiere `DATABASE_URL`.
+
+Comando típico (desde la raíz del repo; la app normaliza a `postgresql+psycopg`):
+
+  DATABASE_URL="postgresql://user:pass@host:5432/db" alembic upgrade head
+
+El esquema inicial replica el DDL SQLite de `database.py`; ver también `docs/schema_parity.md`.

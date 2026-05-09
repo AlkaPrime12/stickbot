@@ -1,8 +1,29 @@
 import os
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _parse_database_url() -> tuple[str | None, str | None]:
+    """
+    DATABASE_URL opcional (Postgres recomendado en prod compartido).
+    Devuelve (url_sin_recortes, etiqueta_segura_sin_password).
+    """
+    raw = (os.getenv("DATABASE_URL") or "").strip()
+    if not raw:
+        return None, None
+    display = raw
+    try:
+        p = urlparse(raw if "://" in raw else f"postgresql://{raw}")
+        host = p.hostname or "?"
+        db = (p.path or "").lstrip("/") or "?"
+        display = f"{p.scheme or 'postgresql'}@{host}:{p.port or 'default'}/{db}"
+    except Exception:
+        display = "(configured)"
+    return raw, display
 
 
 def _resolve_public_base_url() -> str:
@@ -40,6 +61,8 @@ class Settings:
     discord_client_secret: str = os.getenv("DISCORD_CLIENT_SECRET", "")
     discord_redirect_uri: str = field(default_factory=_derived_redirect_uri)
     app_base_url: str = field(default_factory=_resolve_public_base_url)
+    database_url: str | None = None
+    database_url_safe_label: str | None = None
     database_path: str = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "stickbot.db"))
     session_secret: str = os.getenv("SESSION_SECRET", "change-this-session-secret")
     default_daily_limit: int = int(os.getenv("DEFAULT_DAILY_LIMIT", "3"))
@@ -56,4 +79,11 @@ def _normalize_database_path(path_value: str) -> str:
 
 
 settings = Settings()
+_db_u, _db_lbl = _parse_database_url()
+settings.database_url = _db_u
+settings.database_url_safe_label = _db_lbl
 settings.database_path = _normalize_database_path(settings.database_path)
+
+
+def uses_postgresql() -> bool:
+    return bool(settings.database_url and settings.database_url.strip())
