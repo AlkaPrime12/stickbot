@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>StickBot Setup</title></head>
+<body>
+  <h1>StickBot Setup Panel</h1>
+  <p>Instala el bot y luego configura canales manual o automaticamente.</p>
+  <p><a href="{{ invite_url }}">Invitar bot al servidor</a></p>
+  {% if user %}
+    <p>Conectado como {{ user.username }}</p>
+    <p><a href="/setup">Ir al setup</a></p>
+  {% else %}
+    <p><a href="/auth/login">Login con Discord</a></p>
+  {% endif %}
+</body>
+</html>

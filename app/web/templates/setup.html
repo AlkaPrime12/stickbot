@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Seleccionar Servidor</title></head>
+<body>
+  <h2>Selecciona un servidor</h2>
+  <ul>
+    {% for g in guilds %}
+      <li><a href="/setup/{{ g.id }}">{{ g.name }}</a></li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

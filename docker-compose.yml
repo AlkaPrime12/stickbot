@@ -1,0 +1,22 @@
+services:
+  web:
+    build: .
+    command: python run_web.py
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+
+  bot:
+    build: .
+    command: python run_bot.py
+    env_file:
+      - .env
+    depends_on:
+      - web
+    volumes:
+      - ./:/app
+      - ./data:/app/data

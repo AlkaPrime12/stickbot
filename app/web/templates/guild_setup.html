@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Configurar Guild</title></head>
+<body>
+  <h2>Configuracion del servidor {{ guild_id }}</h2>
+
+  <h3>Manual</h3>
+  <form method="post" action="/setup/{{ guild_id }}/manual">
+    <label>Canal Buzon ID <input name="channel_buzon_id" value="{{ config.channel_buzon_id or '' }}"></label><br>
+    <label>Canal Registro ID <input name="channel_registro_id" value="{{ config.channel_registro_id or '' }}"></label><br>
+    <label>Canal Historial ID <input name="channel_historial_id" value="{{ config.channel_historial_id or '' }}"></label><br>
+    <label>Canal General ID <input name="channel_general_id" value="{{ config.channel_general_id or '' }}"></label><br>
+    <label>Canal Busqueda ID <input name="channel_busqueda_id" value="{{ config.channel_busqueda_id or '' }}"></label><br>
+    <label>Rol Buscando ID <input name="role_buscando_id" value="{{ config.role_buscando_id or '' }}"></label><br>
+    <label>Cooldown (min) <input name="cooldown_minutes" type="number" value="{{ config.cooldown_minutes }}"></label><br>
+    <label>Limite diario <input name="daily_limit" type="number" value="{{ config.daily_limit }}"></label><br>
+    <button type="submit">Guardar manual</button>
+  </form>
+
+  <h3>Automatico</h3>
+  <form method="post" action="/setup/{{ guild_id }}/auto">
+    <button type="submit">Configurar automatico</button>
+  </form>
+</body>
+</html>
