@@ -6,13 +6,14 @@
   <title>{% block title %}StickBot{% endblock %}</title>
   <style>
     :root {
-      --bg: #0b1020;
+      --bg: #070b14;
       --card: #111827;
       --border: #1f2937;
       --text: #e2e8f0;
       --muted: #94a3b8;
       --accent: #2563eb;
       --accent-dim: #1d4ed8;
+      --glow: rgba(99, 102, 241, 0.15);
     }
     * { box-sizing: border-box; }
     body {
@@ -55,6 +56,7 @@
       flex: 1;
       padding: 24px 20px 48px;
       max-width: 960px;
+      width: 100%;
     }
     .card {
       background: var(--card);
@@ -124,6 +126,7 @@
     <a href="/overview">Overview</a>
     <a href="/">Inicio</a>
     <a href="/setup">Servidores</a>
+    <a href="/leaderboard">Leaderboard global</a>
     {% if guild_nav_id %}
     <a href="/setup/{{ guild_nav_id }}">Manage</a>
     {% endif %}

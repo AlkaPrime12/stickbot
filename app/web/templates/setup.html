@@ -3,15 +3,28 @@
 {% block content %}
 <div class="card">
   <h2>Servidores</h2>
-  <p class="muted">Elegí un servidor para abrir Manage (configuración completa).</p>
+  {% if guilds_error and guilds_error != "no_token" %}
+    <p style="color:#fca5a5;padding:12px;background:#1c1917;border-radius:8px;border:1px solid #7f1d1d;">
+      No se pudieron cargar los servidores ({{ guilds_error }}).
+      <a href="/auth/login">Iniciar sesión de nuevo</a>
+    </p>
+  {% elif not guilds %}
+    <p class="muted">No hay servidores listados. Si deberías ver alguno:</p>
+    <ul class="muted">
+      <li><a href="/auth/login">Iniciá sesión otra vez con Discord</a> (la sesión OAuth caduca).</li>
+      <li>Asegurate de usar la misma cuenta de Discord que administra el servidor.</li>
+    </ul>
+  {% else %}
+    <p class="muted">Elegí un servidor para abrir <strong>Manage</strong> (comandos, canales, OCR). Total: {{ guilds|length }}.</p>
+  {% endif %}
   <label for="srv-q" class="muted">Búsqueda rápida</label>
   <input id="srv-q" type="search" placeholder="Filtrar por nombre..." autocomplete="off" style="max-width:100%">
   <ul id="srv-list" style="margin-top:12px;padding-left:20px;">
     {% for g in guilds %}
-      <li data-name="{{ g.name|lower }}"><a href="/setup/{{ g.id }}">{{ g.name }}</a></li>
+      <li data-name="{{ (g.name or '')|lower }}"><a href="/setup/{{ g.id }}">{{ g.name or g.id }}</a></li>
     {% endfor %}
   </ul>
-  <p class="muted"><a href="/">Volver al inicio</a></p>
+  <p class="muted"><a href="/auth/login">Refrescar sesión Discord</a> · <a href="/">Inicio</a></p>
 </div>
 {% endblock %}
 {% block scripts %}

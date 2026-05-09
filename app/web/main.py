@@ -10,8 +10,11 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.db import get_connection
+from app.message_defaults import MESSAGE_TEMPLATE_KEYS, MESSAGE_TEMPLATE_HELP
+from app.repositories.player_repository import PlayerRepository
 from app.services.guild_config_service import GuildConfigService
 from app.services.discord_setup_service import DiscordSetupService
+from app.services.message_template_service import MessageTemplateService
 
 
 def _session_https_only() -> bool:
@@ -31,6 +34,7 @@ app.add_middleware(
 templates = Jinja2Templates(directory="app/web/templates")
 guild_cfg_service = GuildConfigService()
 discord_setup_service = DiscordSetupService()
+message_template_service = MessageTemplateService()
 
 
 def _health_payload() -> dict:
@@ -64,6 +68,32 @@ def _health_payload() -> dict:
 def _sanitize_csv_channels(s: str) -> str:
     parts = [p.strip() for p in (s or "").replace(";", ",").split(",")]
     return ",".join(p for p in parts if p)
+
+
+async def _fetch_discord_guild_list(request: Request) -> tuple[list[dict], str | None]:
+    """
+    Obtiene guilds desde la API de Discord (no guarda en sesión: evita superar el límite ~4KB del cookie).
+    """
+    token = request.session.get("oauth_token")
+    if not token:
+        return [], "no_token"
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.get(
+            "https://discord.com/api/v10/users/@me/guilds",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if r.status_code == 401:
+            request.session.pop("oauth_token", None)
+            request.session.pop("guilds", None)
+            request.session.pop("user", None)
+            return [], "token_expired"
+        if not r.is_success:
+            return [], f"discord_http_{r.status_code}"
+        guilds = r.json()
+    if not isinstance(guilds, list):
+        return [], "invalid_response"
+    guilds.sort(key=lambda g: (g.get("name") or "").lower())
+    return guilds, None
 
 
 def _collect_channel_ids(payload: dict) -> list[str]:
@@ -107,16 +137,45 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    request.session.pop("guilds", None)
     user = request.session.get("user")
+    login_msg = request.query_params.get("login")
     return templates.TemplateResponse(
         name="home.html",
         context={
             "request": request,
             "user": user,
             "invite_url": _bot_invite_url(),
+            "session_expired": login_msg == "expired",
         },
         request=request,
     )
+
+
+@app.get("/leaderboard", response_class=HTMLResponse)
+async def leaderboard_global_page(request: Request):
+    repo = PlayerRepository()
+    rows = repo.top_players_global(100)
+    total = repo.count_global_rows()
+    return templates.TemplateResponse(
+        "leaderboard_global.html",
+        context={"request": request, "rows": rows, "total": total},
+        request=request,
+    )
+
+
+@app.get("/api/leaderboard/global")
+async def api_leaderboard_global(limit: int = 100, offset: int = 0):
+    repo = PlayerRepository()
+    rows = repo.top_players_global(min(limit, 500), offset)
+    total = repo.count_global_rows()
+    return {
+        "total": total,
+        "rows": [
+            {"guild_id": r[0], "guild_label": r[1], "player": r[2], "mmr": round(float(r[3]), 1)}
+            for r in rows
+        ],
+    }
 
 
 @app.get("/overview", response_class=HTMLResponse)
@@ -192,7 +251,8 @@ async def auth_callback(request: Request, code: str, state: str):
 
     request.session["oauth_token"] = token
     request.session["user"] = user_resp.json()
-    request.session["guilds"] = guilds_resp.json()
+    # No guardar guilds en la sesión: la cookie tiene ~4KB y la lista ROMPE el límite.
+    request.session.pop("guilds", None)
     return RedirectResponse("/setup")
 
 
@@ -200,10 +260,18 @@ async def auth_callback(request: Request, code: str, state: str):
 async def setup_page(request: Request):
     if "oauth_token" not in request.session:
         return RedirectResponse("/")
-    guilds = request.session.get("guilds", [])
+    # Limpia datos viejos que hinchaban la cookie
+    request.session.pop("guilds", None)
+    guilds, guilds_error = await _fetch_discord_guild_list(request)
+    if guilds_error == "token_expired":
+        return RedirectResponse("/?login=expired")
     return templates.TemplateResponse(
         name="setup.html",
-        context={"request": request, "guilds": guilds},
+        context={
+            "request": request,
+            "guilds": guilds,
+            "guilds_error": guilds_error,
+        },
         request=request,
     )
 
@@ -214,6 +282,11 @@ async def setup_guild_page(request: Request, guild_id: str):
         return RedirectResponse("/")
     config = guild_cfg_service.get_or_default(guild_id)
     saved = request.query_params.get("saved") == "1"
+    merged = message_template_service.get_all_merged(guild_id)
+    template_rows = [
+        {"key": k, "text": merged.get(k, ""), "help": MESSAGE_TEMPLATE_HELP.get(k, "")}
+        for k in MESSAGE_TEMPLATE_KEYS.keys()
+    ]
     return templates.TemplateResponse(
         name="guild_setup.html",
         context={
@@ -223,6 +296,7 @@ async def setup_guild_page(request: Request, guild_id: str):
             "saved": saved,
             "guild_nav_id": guild_id,
             "discord_redirect_uri": settings.discord_redirect_uri,
+            "template_rows": template_rows,
         },
         request=request,
     )
@@ -339,7 +413,12 @@ async def setup_auto(guild_id: str):
 async def api_guilds(request: Request):
     if "oauth_token" not in request.session:
         return JSONResponse({"error": "unauthorized"}, status_code=401)
-    return request.session.get("guilds", [])
+    guilds, err = await _fetch_discord_guild_list(request)
+    if err == "token_expired":
+        return JSONResponse({"error": "token_expired"}, status_code=401)
+    if err and err != "no_token":
+        return JSONResponse({"error": err, "guilds": guilds}, status_code=502)
+    return guilds
 
 
 @app.get("/api/guilds/{guild_id}/config")
@@ -360,6 +439,25 @@ async def api_put_guild_config(request: Request, guild_id: str):
         if key.endswith("_allowed_channels") and isinstance(payload[key], str):
             payload[key] = _sanitize_csv_channels(payload[key])
     return guild_cfg_service.save(guild_id, payload)
+
+
+@app.get("/api/guilds/{guild_id}/message-templates")
+async def api_get_message_templates(request: Request, guild_id: str):
+    if "oauth_token" not in request.session:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return message_template_service.get_all_merged(guild_id)
+
+
+@app.put("/api/guilds/{guild_id}/message-templates")
+async def api_put_message_templates(request: Request, guild_id: str):
+    if "oauth_token" not in request.session:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "invalid_json"}, status_code=400)
+    filtered = {k: str(v)[:1900] for k, v in payload.items() if k in MESSAGE_TEMPLATE_KEYS}
+    message_template_service.save_partial(guild_id, filtered)
+    return message_template_service.get_all_merged(guild_id)
 
 
 @app.post("/api/guilds/{guild_id}/config/validate")

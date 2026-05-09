@@ -96,13 +96,18 @@ Slash commands principales:
 - `GET /health` — estado del despliegue, token bot, OAuth, muestra opcional de último error OCR en BD.
 - `GET /api/guilds` — requiere sesión OAuth; lista guilds del usuario.
 - `GET/PUT /api/guilds/{guild_id}/config` — lectura/escritura de `guild_config`.
+- `GET/PUT /api/guilds/{guild_id}/message-templates` — plantillas de texto del bot (claves en [app/message_defaults.py](app/message_defaults.py)).
 - `POST /api/guilds/{guild_id}/config/validate` — comprueba IDs de canal contra Discord (token del **bot**).
+- `GET /leaderboard` — página **Leaderboard global** (todos los servidores).
+- `GET /api/leaderboard/global` — JSON del ranking global (`guild_player_stats`).
 
 ## 9) Notas
 
-- MMR usa `mmr_k_factor` y `host_penalty_percent` por servidor.
-- OCR usa márgenes, umbrales de confianza y distancia de color configurables; **nunca** se puntúa partida sin pasar por imagen → OCR.
-- Mensajes ANSI (`ansi_enabled`, `ansi_preset`): mejor soporte en Discord escritorio.
+- **MMR por servidor:** tabla `guild_player_stats`; `/stickleaderboard` solo lista el guild actual; la web global agrega todos los servidores.
+- MMR en partidas usa `mmr_k_factor` y `host_penalty_percent` por servidor.
+- OCR: márgenes y umbrales desde Manage; **nunca** se puntúa partida sin imagen → OCR.
+- Mensajes ANSI (`ansi_preset`): bloques ```ansi```; mejor en Discord escritorio. Referencia de colores: [Rebane](https://rebane2001.com/discord-colored-text-generator).
 - Nunca commitear `.env` ni exponer token/secret en el panel.
+- `docs/config_map.md`, `docs/ocr_flow.md`, `docs/extensibility_slash.md` — referencia rápida.
 - `docs/current_logic_spec.md` documenta el comportamiento baseline.
 - `docs/qa_checklist.md` lista pruebas de regresión recomendadas.

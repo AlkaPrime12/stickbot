@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard global — StickBot{% endblock %}
+{% block head_extra %}
+<style>
+  main.shell { max-width: 1100px; }
+  .lb-hero {
+    text-align: center;
+    padding: 36px 20px;
+    background: radial-gradient(ellipse 80% 60% at 50% -20%, rgba(99,102,241,0.35), transparent),
+      linear-gradient(180deg, #0f172a 0%, #070b14 100%);
+    border: 1px solid #334155;
+    border-radius: 16px;
+    margin-bottom: 24px;
+  }
+  .lb-hero h2 { margin: 0 0 8px; font-size: 1.75rem; letter-spacing: -0.02em; }
+  .lb-hero .sub { color: var(--muted); font-size: 0.95rem; }
+  .lb-podium { display: flex; justify-content: center; align-items: flex-end; gap: 12px; margin: 28px 0; flex-wrap: wrap; }
+  .p-slot {
+    width: 170px;
+    padding: 18px 12px;
+    border-radius: 14px;
+    border: 1px solid #334155;
+    text-align: center;
+    background: #111827;
+  }
+  .p-slot.r1 { order: 2; border-color: #eab308; background: linear-gradient(180deg, rgba(234,179,8,0.18), #111827); min-height: 180px; }
+  .p-slot.r2 { order: 1; min-height: 150px; }
+  .p-slot.r3 { order: 3; min-height: 130px; }
+  .p-rank { font-size: 0.75rem; color: #a78bfa; text-transform: uppercase; letter-spacing: 0.08em; }
+  .p-name { font-weight: 700; font-size: 1.05rem; margin: 8px 0; word-break: break-word; }
+  .p-mmr { font-size: 1.4rem; color: #34d399; font-weight: 700; }
+  .p-guild { font-size: 0.75rem; color: var(--muted); margin-top: 6px; }
+  .lb-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  .lb-table th, .lb-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #1f2937; }
+  .lb-table th { color: #94a3b8; font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .lb-table tr:hover td { background: rgba(99,102,241,0.06); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #1e293b; font-size: 0.75rem; color: #cbd5e1; }
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="lb-hero">
+  <h2>Leaderboard global</h2>
+  <p class="sub">Todos los servidores &mdash; {{ total }} entradas en ranking (un jugador puede aparecer en varios servidores)</p>
+</div>
+
+{% if rows and rows|length >= 1 %}
+<div class="card" style="border:none;background:transparent;padding:0">
+  <div class="lb-podium">
+    {% if rows|length >= 2 %}
+    <div class="p-slot r2">
+      <div class="p-rank">#2</div>
+      <div class="p-name">{{ rows[1][2] }}</div>
+      <div class="p-mmr">{{ rows[1][3]|round|int }}</div>
+      <div class="p-guild">{{ rows[1][1] or rows[1][0] }}</div>
+    </div>
+    {% endif %}
+    <div class="p-slot r1">
+      <div class="p-rank">Campeón</div>
+      <div class="p-name">{{ rows[0][2] }}</div>
+      <div class="p-mmr">{{ rows[0][3]|round|int }}</div>
+      <div class="p-guild">{{ rows[0][1] or rows[0][0] }}</div>
+    </div>
+    {% if rows|length >= 3 %}
+    <div class="p-slot r3">
+      <div class="p-rank">#3</div>
+      <div class="p-name">{{ rows[2][2] }}</div>
+      <div class="p-mmr">{{ rows[2][3]|round|int }}</div>
+      <div class="p-guild">{{ rows[2][1] or rows[2][0] }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">Tabla completa</h3>
+  {% if rows %}
+  <table class="lb-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Jugador</th>
+        <th>MMR</th>
+        <th>Servidor</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><span class="badge">{{ loop.index }}</span></td>
+        <td><strong>{{ r[2] }}</strong></td>
+        <td>{{ r[3]|round|int }}</td>
+        <td class="muted" title="{{ r[0] }}">{{ r[1] or r[0] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Aún no hay datos en <code>guild_player_stats</code>. Jugá partidas en Discord para poblar el ranking.</p>
+  {% endif %}
+  <p class="muted" style="margin-top:16px">En Discord, <code>/stickleaderboard</code> muestra solo el ranking de ese servidor.</p>
+</div>
+{% endblock %}

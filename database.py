@@ -3,7 +3,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from app.db_migrations import ensure_guild_config_extended_columns
+from app.db_migrations import ensure_all_post_schema
 
 
 def inicializar_db():
@@ -132,7 +132,7 @@ def inicializar_db():
 
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_limite_fecha ON limite_diario(fecha)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_setup_runs_guild ON setup_runs(guild_id)')
-    ensure_guild_config_extended_columns(conexion)
+    ensure_all_post_schema(conexion)
     conexion.commit()
     conexion.close()
     print("¡Base de datos estructurada y lista para guardar los puntajes!")

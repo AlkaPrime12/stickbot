@@ -7,7 +7,16 @@ from app.services.player_service import PlayerService
 from app.services.guild_config_service import GuildConfigService
 from app.services.match_service import MatchService
 from app.services.discord_setup_service import DiscordSetupService
+from app.services.message_template_service import MessageTemplateService
 from app.bot import formatting
+
+
+_message_templates = MessageTemplateService()
+
+
+def _txt(interaction: discord.Interaction, key: str, **kwargs) -> str:
+    gid = str(interaction.guild.id) if interaction.guild else ""
+    return _message_templates.render(gid, key, **kwargs)
 
 
 class StickBot(commands.Bot):
@@ -61,115 +70,149 @@ def _in_config_channel(interaction: discord.Interaction, key: str) -> bool:
 
 def _command_allowed(interaction: discord.Interaction, cmd_key: str, channel_key: str) -> tuple[bool, str]:
     if not interaction.guild:
-        return False, "Este comando solo funciona en servidor."
+        return False, "solo_servidor"
     cfg = bot.guild_cfg_service.get_or_default(str(interaction.guild.id))
     if not cfg.get(f"{cmd_key}_enabled", 1):
-        return False, "Este comando esta deshabilitado en Manage."
+        return False, "cmd_deshabilitado"
 
     require_channel = int(cfg.get(f"{cmd_key}_require_channel", 0)) == 1
     allowed = [c.strip() for c in (cfg.get(f"{cmd_key}_allowed_channels", "") or "").split(",") if c.strip()]
     if require_channel:
         if allowed:
             if str(interaction.channel_id) not in allowed:
-                return False, "Comando restringido: usa uno de los canales configurados."
+                return False, "cmd_restringido_csv"
         elif not _in_config_channel(interaction, channel_key):
-            return False, "Comando restringido al canal configurado."
+            return False, "cmd_restringido_canal"
     return True, ""
 
 
-def _fmt(guild_id: int, kind: str, message: str) -> str:
-    cfg = bot.guild_cfg_service.get_or_default(str(guild_id))
-    ansi_enabled = int(cfg.get("ansi_enabled", 1)) == 1
-    if not ansi_enabled:
-        return message
-    preset = (cfg.get("ansi_preset") or "default").strip()
+def _fmt(interaction: discord.Interaction, kind: str, message: str) -> str:
+    """Todos los mensajes van con bloque ANSI (colores) según preset del servidor."""
+    preset = "default"
+    if interaction.guild:
+        cfg = bot.guild_cfg_service.get_or_default(str(interaction.guild.id))
+        preset = (cfg.get("ansi_preset") or "default").strip() or "default"
     return formatting.styled_message(preset, kind, message)
 
 
 @app_commands.command(name="registrar", description="Registra tu nombre de juego.")
 @app_commands.describe(nombre_steam="Tu nombre de Steam")
 async def register(interaction: discord.Interaction, nombre_steam: str):
-    allowed, reason = _command_allowed(interaction, "cmd_registrar", "channel_registro_id")
+    allowed, tmpl = _command_allowed(interaction, "cmd_registrar", "channel_registro_id")
     if not allowed:
-        await interaction.response.send_message(reason, ephemeral=True)
+        await interaction.response.send_message(_fmt(interaction, "error", _txt(interaction, tmpl)), ephemeral=True)
         return
-    created, name = bot.player_service.register(str(interaction.user.id), nombre_steam)
+    created, name = bot.player_service.register(
+        str(interaction.user.id),
+        nombre_steam,
+        guild_id=str(interaction.guild.id),
+    )
     if not created:
-        await interaction.response.send_message(_fmt(interaction.guild.id, "warn", "Ya estas registrado."), ephemeral=True)
+        await interaction.response.send_message(_fmt(interaction, "warn", _txt(interaction, "registrar_ya")), ephemeral=True)
         return
     try:
         await interaction.user.edit(nick=name)
     except discord.Forbidden:
         pass
-    await interaction.response.send_message(_fmt(interaction.guild.id, "ok", f"Registrado como {name} con 400 MMR iniciales."))
+    await interaction.response.send_message(
+        _fmt(interaction, "ok", _txt(interaction, "registrar_ok", name=name)),
+    )
 
 
 @app_commands.command(name="renombrar", description="Cambia tu nombre de juego.")
 @app_commands.describe(nuevo_nombre="Nuevo nombre de juego")
 async def rename(interaction: discord.Interaction, nuevo_nombre: str):
-    allowed, reason = _command_allowed(interaction, "cmd_renombrar", "channel_registro_id")
+    allowed, tmpl = _command_allowed(interaction, "cmd_renombrar", "channel_registro_id")
     if not allowed:
-        await interaction.response.send_message(reason, ephemeral=True)
+        await interaction.response.send_message(_fmt(interaction, "error", _txt(interaction, tmpl)), ephemeral=True)
         return
-    ok, name = bot.player_service.rename(str(interaction.user.id), nuevo_nombre)
+    ok, name = bot.player_service.rename(
+        str(interaction.user.id),
+        nuevo_nombre,
+        guild_id=str(interaction.guild.id),
+    )
     if not ok:
-        await interaction.response.send_message(_fmt(interaction.guild.id, "error", "No estas registrado. Usa /registrar primero."), ephemeral=True)
+        await interaction.response.send_message(
+            _fmt(interaction, "error", _txt(interaction, "renombrar_no_reg")),
+            ephemeral=True,
+        )
         return
     try:
         await interaction.user.edit(nick=name)
     except discord.Forbidden:
         pass
-    await interaction.response.send_message(_fmt(interaction.guild.id, "ok", f"Nombre actualizado a {name}."))
+    await interaction.response.send_message(_fmt(interaction, "ok", _txt(interaction, "renombrar_ok", name=name)))
 
 
 @app_commands.command(name="perfil", description="Muestra tu perfil y MMR.")
 async def profile(interaction: discord.Interaction):
-    allowed, reason = _command_allowed(interaction, "cmd_perfil", "channel_general_id")
+    allowed, tmpl = _command_allowed(interaction, "cmd_perfil", "channel_general_id")
     if not allowed:
-        await interaction.response.send_message(reason, ephemeral=True)
+        await interaction.response.send_message(_fmt(interaction, "error", _txt(interaction, tmpl)), ephemeral=True)
         return
     from app.repositories.player_repository import PlayerRepository
 
     repo = PlayerRepository()
     row = repo.get_by_discord_id(str(interaction.user.id))
     if not row:
-        await interaction.response.send_message(_fmt(interaction.guild.id, "error", "No estas registrado. Usa /registrar."), ephemeral=True)
+        await interaction.response.send_message(
+            _fmt(interaction, "error", _txt(interaction, "perfil_no_reg")),
+            ephemeral=True,
+        )
         return
-    await interaction.response.send_message(_fmt(interaction.guild.id, "info", f"Jugador: {row[1]} | MMR: {round(row[2])}"))
+    repo.ensure_player_in_guild(str(interaction.user.id), str(interaction.guild.id))
+    mmr_g = repo.get_mmr_for_guild(str(interaction.user.id), str(interaction.guild.id))
+    mmr_show = round(mmr_g if mmr_g is not None else (row[2] or 400))
+    await interaction.response.send_message(
+        _fmt(
+            interaction,
+            "info",
+            _txt(interaction, "perfil_ok", name=row[1], mmr=mmr_show),
+        ),
+    )
 
 
 @app_commands.command(name="stickleaderboard", description="Muestra el top de jugadores.")
 async def leaderboard(interaction: discord.Interaction):
-    allowed, reason = _command_allowed(interaction, "cmd_stickleaderboard", "channel_historial_id")
+    allowed, tmpl = _command_allowed(interaction, "cmd_stickleaderboard", "channel_historial_id")
     if not allowed:
-        await interaction.response.send_message(reason, ephemeral=True)
+        await interaction.response.send_message(_fmt(interaction, "error", _txt(interaction, tmpl)), ephemeral=True)
         return
     from app.repositories.player_repository import PlayerRepository
 
-    top = PlayerRepository().top_players(15)
+    top = PlayerRepository().top_players(15, guild_id=str(interaction.guild.id))
     if not top:
-        await interaction.response.send_message(_fmt(interaction.guild.id, "warn", "No hay jugadores registrados."))
+        await interaction.response.send_message(
+            _fmt(interaction, "warn", _txt(interaction, "leaderboard_vacio")),
+        )
         return
     lines = []
     for i, (name, mmr) in enumerate(top):
         lines.append(f"{i + 1}. {name} - {round(mmr)} MMR")
-    await interaction.response.send_message(_fmt(interaction.guild.id, "info", "Leaderboard\n" + "\n".join(lines)))
+    body = _txt(interaction, "leaderboard_titulo") + "\n" + "\n".join(lines)
+    await interaction.response.send_message(_fmt(interaction, "info", body))
 
 
 @app_commands.command(name="partida", description="Sube captura para procesar partida.")
 @app_commands.describe(host="Host de la partida (opcional)")
 async def match(interaction: discord.Interaction, host: discord.Member | None = None):
-    allowed, reason = _command_allowed(interaction, "cmd_partida", "channel_buzon_id")
+    allowed, tmpl = _command_allowed(interaction, "cmd_partida", "channel_buzon_id")
     if not allowed:
-        await interaction.response.send_message(reason, ephemeral=True)
+        await interaction.response.send_message(_fmt(interaction, "error", _txt(interaction, tmpl)), ephemeral=True)
         return
     # Flujo fijo: solo imagen (primer attachment debe ser imagen si el usuario adjunta mas)
     if not interaction.attachments:
-        await interaction.response.send_message(_fmt(interaction.guild.id, "warn", "Adjunta la captura de resultado."), ephemeral=True)
+        await interaction.response.send_message(
+            _fmt(interaction, "warn", _txt(interaction, "partida_no_imagen")),
+            ephemeral=True,
+        )
         return
     att = interaction.attachments[0]
     if not att.content_type or not att.content_type.startswith("image/"):
-        await interaction.response.send_message(_fmt(interaction.guild.id, "warn", "Adjunta una imagen (PNG/JPG/WebP)."), ephemeral=True)
+        await interaction.response.send_message(
+            _fmt(interaction, "warn", _txt(interaction, "partida_formato")),
+            ephemeral=True,
+        )
         return
     await interaction.response.defer(thinking=True)
     gid = str(interaction.guild.id)
@@ -188,7 +231,7 @@ async def match(interaction: discord.Interaction, host: discord.Member | None = 
         err_msg = f"{type(exc).__name__}: {exc}"
         bot.guild_cfg_service.save(gid, {"last_ocr_error": err_msg[:500]})
         await interaction.followup.send(
-            _fmt(interaction.guild.id, "error", "Error al procesar la imagen con OCR. Revisa Manage > OCR o la captura."),
+            _fmt(interaction, "error", _txt(interaction, "partida_ocr_error")),
         )
         return
 
@@ -198,7 +241,7 @@ async def match(interaction: discord.Interaction, host: discord.Member | None = 
             gid,
             {"last_ocr_error": "validacion: sin resultados o puntos bajo umbral ocr_min_points"},
         )
-        await interaction.followup.send(_fmt(interaction.guild.id, "error", "No se detectaron resultados validos."))
+        await interaction.followup.send(_fmt(interaction, "error", _txt(interaction, "partida_sin_resultados")))
         return
 
     host_name = None
@@ -214,14 +257,15 @@ async def match(interaction: discord.Interaction, host: discord.Member | None = 
         host_name,
         k_factor=k_factor,
         host_penalty_percent=host_penalty,
+        guild_id=gid,
     )
     bot.guild_cfg_service.save(gid, {"last_ocr_error": None})
     lines = []
     for jugador, puntos in sorted(adjusted.items(), key=lambda x: x[1], reverse=True):
         delta = round(changes[jugador])
         lines.append(f"{jugador}: {puntos} pts ({'+' if delta > 0 else ''}{delta} MMR)")
-    msg = "Partida procesada:\n" + "\n".join(lines)
-    sent = await interaction.followup.send(_fmt(interaction.guild.id, "ok", msg))
+    msg = _txt(interaction, "partida_ok_prefijo") + "\n" + "\n".join(lines)
+    sent = await interaction.followup.send(_fmt(interaction, "ok", msg))
     if int(cfg.get("partida_confirm_reaction", 0)) == 1 and sent:
         try:
             await sent.add_reaction("\u2705")

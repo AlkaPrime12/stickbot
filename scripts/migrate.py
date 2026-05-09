@@ -6,7 +6,7 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if base_dir not in sys.path:
     sys.path.insert(0, base_dir)
 
-from app.db_migrations import ensure_guild_config_extended_columns
+from app.db_migrations import ensure_all_post_schema
 
 
 def run():
@@ -39,7 +39,7 @@ def run():
                 (name,),
             )
             print(f"Applied migration: {name}")
-        ensure_guild_config_extended_columns(conn)
+        ensure_all_post_schema(conn)
         conn.commit()
     finally:
         conn.close()

@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}StickBot Dashboard{% endblock %}
 {% block content %}
+{% if session_expired %}
+<div class="card" style="border-color:#b45309;background:#1c1917">
+  <p><strong>Sesión de Discord caducada.</strong> Volvé a iniciar sesión para ver tus servidores.</p>
+  <p><a href="/auth/login">Login con Discord</a></p>
+</div>
+{% endif %}
 <div class="card">
   <h2>StickBot Dashboard</h2>
   <p class="muted">Panel: Overview, Manage por servidor, OCR y mensajes ANSI.</p>
@@ -9,7 +15,7 @@
 {% if user %}
   <div class="card">
     <p>Conectado como <strong>{{ user.username }}</strong></p>
-    <p><a href="/overview">Overview</a> · <a href="/setup">Servidores / Manage</a></p>
+    <p><a href="/overview">Overview</a> · <a href="/leaderboard">Leaderboard global</a> · <a href="/setup">Servidores / Manage</a></p>
   </div>
 {% else %}
   <div class="card"><p><a href="/auth/login">Login con Discord</a></p></div>

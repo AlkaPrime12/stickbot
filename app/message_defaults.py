@@ -1,0 +1,41 @@
+"""Claves y textos por defecto para plantillas editables desde Manage (placeholders con {nombre})."""
+
+MESSAGE_TEMPLATE_KEYS: dict[str, str] = {
+    "registrar_ok": "Registrado como {name} con 400 MMR iniciales.",
+    "registrar_ya": "Ya estas registrado.",
+    "renombrar_ok": "Nombre actualizado a {name}.",
+    "renombrar_no_reg": "No estas registrado. Usa /registrar primero.",
+    "perfil_no_reg": "No estas registrado. Usa /registrar.",
+    "perfil_ok": "Jugador: {name} | MMR: {mmr}",
+    "leaderboard_vacio": "No hay jugadores registrados en este servidor.",
+    "leaderboard_titulo": "Leaderboard (este servidor)",
+    "partida_no_imagen": "Adjunta la captura de resultado.",
+    "partida_formato": "Adjunta una imagen (PNG/JPG/WebP).",
+    "partida_ocr_error": "Error al procesar la imagen con OCR. Revisa Manage > OCR o la captura.",
+    "partida_sin_resultados": "No se detectaron resultados validos.",
+    "partida_ok_prefijo": "Partida procesada:",
+    "solo_servidor": "Este comando solo funciona en servidor.",
+    "cmd_deshabilitado": "Este comando esta deshabilitado en Manage.",
+    "cmd_restringido_csv": "Comando restringido: usa uno de los canales configurados.",
+    "cmd_restringido_canal": "Comando restringido al canal configurado.",
+}
+
+MESSAGE_TEMPLATE_HELP: dict[str, str] = {
+    "registrar_ok": "Variables: {name}",
+    "registrar_ya": "Sin variables.",
+    "renombrar_ok": "{name}",
+    "renombrar_no_reg": "Sin variables.",
+    "perfil_no_reg": "Sin variables.",
+    "perfil_ok": "{name}, {mmr}",
+    "leaderboard_vacio": "Sin variables.",
+    "leaderboard_titulo": "Sin variables (titulo interno).",
+    "partida_no_imagen": "Sin variables.",
+    "partida_formato": "Sin variables.",
+    "partida_ocr_error": "Sin variables.",
+    "partida_sin_resultados": "Sin variables.",
+    "partida_ok_prefijo": "Texto antes de la lista de jugadores.",
+    "solo_servidor": "Sin variables.",
+    "cmd_deshabilitado": "Sin variables.",
+    "cmd_restringido_csv": "Sin variables.",
+    "cmd_restringido_canal": "Sin variables.",
+}

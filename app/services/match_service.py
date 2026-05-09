@@ -1,4 +1,5 @@
 import datetime
+
 from app.db import get_connection
 from app.domain.mmr import calcular_cambios_mmr
 
@@ -10,24 +11,50 @@ class MatchService:
         host_game_name: str | None = None,
         k_factor: float = 32.0,
         host_penalty_percent: float = 8.0,
+        guild_id: str | None = None,
     ):
+        if not guild_id:
+            raise ValueError("guild_id es obligatorio para MMR por servidor.")
+
         adjusted = dict(resultados)
         if host_game_name and host_game_name in adjusted:
             pct = host_penalty_percent / 100.0
             descuento = round(adjusted[host_game_name] * pct)
             adjusted[host_game_name] -= descuento
 
+        gid = str(guild_id)
+
         with get_connection() as conn:
             mmr_actuales = {}
             for jugador in adjusted:
                 row = conn.execute(
-                    "SELECT mmr FROM jugadores WHERE nombre_juego = ?",
+                    "SELECT id_jugador FROM jugadores WHERE nombre_juego = ?",
                     (jugador,),
                 ).fetchone()
-                mmr_actuales[jugador] = row[0] if row else 400.0
+                if not row:
+                    continue
+                discord_uid = row[0]
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO guild_player_stats (guild_id, discord_user_id, mmr)
+                    VALUES (?, ?, 400.0)
+                    """,
+                    (gid, str(discord_uid)),
+                )
+                r2 = conn.execute(
+                    """
+                    SELECT mmr FROM guild_player_stats
+                    WHERE guild_id = ? AND discord_user_id = ?
+                    """,
+                    (gid, str(discord_uid)),
+                ).fetchone()
+                mmr_actuales[jugador] = float(r2[0]) if r2 else 400.0
 
             cambios = calcular_cambios_mmr(adjusted, mmr_actuales, k_factor=k_factor)
-            conn.execute("INSERT INTO partidas (fecha) VALUES (?)", (str(datetime.datetime.now()),))
+            conn.execute(
+                "INSERT INTO partidas (fecha, guild_id) VALUES (?, ?)",
+                (str(datetime.datetime.now()), gid),
+            )
             id_partida = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
             for jugador, puntos in adjusted.items():
@@ -38,8 +65,25 @@ class MatchService:
                 if not row:
                     continue
                 discord_id = row[0]
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO guild_player_stats (guild_id, discord_user_id, mmr)
+                    VALUES (?, ?, 400.0)
+                    """,
+                    (gid, str(discord_id)),
+                )
                 nuevo_mmr = mmr_actuales[jugador] + cambios[jugador]
-                conn.execute("UPDATE jugadores SET mmr = ? WHERE id_jugador = ?", (nuevo_mmr, discord_id))
+                conn.execute(
+                    """
+                    UPDATE guild_player_stats SET mmr = ?
+                    WHERE guild_id = ? AND discord_user_id = ?
+                    """,
+                    (nuevo_mmr, gid, str(discord_id)),
+                )
+                conn.execute(
+                    "UPDATE jugadores SET mmr = ? WHERE id_jugador = ?",
+                    (nuevo_mmr, str(discord_id)),
+                )
                 conn.execute(
                     "INSERT INTO detalles_partida (id_partida, id_jugador, puntos) VALUES (?, ?, ?)",
                     (id_partida, discord_id, puntos),
