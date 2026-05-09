@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}StickBot{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #111827;
+      --border: #1f2937;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #2563eb;
+      --accent-dim: #1d4ed8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, "Segoe UI", Arial, sans-serif;
+      display: flex;
+    }
+    aside.nav-rail {
+      width: 220px;
+      flex-shrink: 0;
+      background: #0f172a;
+      border-right: 1px solid var(--border);
+      padding: 16px 12px;
+      position: sticky;
+      top: 0;
+      align-self: flex-start;
+      min-height: 100vh;
+    }
+    aside.nav-rail h1 {
+      font-size: 1rem;
+      margin: 0 0 12px 8px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    aside.nav-rail a {
+      display: block;
+      padding: 8px 10px;
+      margin-bottom: 4px;
+      border-radius: 8px;
+      color: #93c5fd;
+      text-decoration: none;
+      font-size: 0.95rem;
+    }
+    aside.nav-rail a:hover { background: rgba(37,99,235,0.12); color: #bfdbfe; }
+    main.shell {
+      flex: 1;
+      padding: 24px 20px 48px;
+      max-width: 960px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+    }
+    h2 { margin-top: 0; font-size: 1.2rem; }
+    a { color: #93c5fd; }
+    button, .btn-link {
+      padding: 10px 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    button:hover { background: var(--accent-dim); }
+    input, select, textarea {
+      width: 100%;
+      max-width: 560px;
+      padding: 8px 10px;
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid #334155;
+      border-radius: 6px;
+    }
+    label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 0.85rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #14532d;
+      border: 1px solid #166534;
+      color: #dcfce7;
+      padding: 12px 18px;
+      border-radius: 10px;
+      display: none;
+      z-index: 50;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .toast.show { display: block; animation: bump 0.25s ease-out; }
+    @keyframes bump { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @media (max-width: 760px) {
+      body { flex-direction: column; }
+      aside.nav-rail {
+        width: 100%;
+        min-height: 0;
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+      }
+      aside.nav-rail h1 { width: 100%; }
+      aside.nav-rail a { display: inline-block; margin: 0 4px 4px 0; }
+    }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <aside class="nav-rail">
+    <h1>STICKBOT</h1>
+    <a href="/overview">Overview</a>
+    <a href="/">Inicio</a>
+    <a href="/setup">Servidores</a>
+    {% if guild_nav_id %}
+    <a href="/setup/{{ guild_nav_id }}">Manage</a>
+    {% endif %}
+    <a href="/overview#ocr">OCR / Partidas</a>
+    <a href="/security">Seguridad</a>
+    <a href="/health" target="_blank">Logs / Health (JSON)</a>
+  </aside>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  <div id="toast" class="toast" role="status">Cambios guardados.</div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

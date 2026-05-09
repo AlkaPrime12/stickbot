@@ -1,5 +1,4 @@
-def calcular_cambios_mmr(resultados_partida, mmr_actuales):
-    k_factor = 32
+def calcular_cambios_mmr(resultados_partida, mmr_actuales, k_factor: float = 32.0):
     cambios = {jugador: 0 for jugador in resultados_partida}
     jugadores = list(resultados_partida.keys())
 

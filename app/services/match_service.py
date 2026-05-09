@@ -4,10 +4,17 @@ from app.domain.mmr import calcular_cambios_mmr
 
 
 class MatchService:
-    def persist_match(self, resultados: dict, host_game_name: str | None = None):
+    def persist_match(
+        self,
+        resultados: dict,
+        host_game_name: str | None = None,
+        k_factor: float = 32.0,
+        host_penalty_percent: float = 8.0,
+    ):
         adjusted = dict(resultados)
         if host_game_name and host_game_name in adjusted:
-            descuento = round(adjusted[host_game_name] * 0.08)
+            pct = host_penalty_percent / 100.0
+            descuento = round(adjusted[host_game_name] * pct)
             adjusted[host_game_name] -= descuento
 
         with get_connection() as conn:
@@ -19,7 +26,7 @@ class MatchService:
                 ).fetchone()
                 mmr_actuales[jugador] = row[0] if row else 400.0
 
-            cambios = calcular_cambios_mmr(adjusted, mmr_actuales)
+            cambios = calcular_cambios_mmr(adjusted, mmr_actuales, k_factor=k_factor)
             conn.execute("INSERT INTO partidas (fecha) VALUES (?)", (str(datetime.datetime.now()),))
             id_partida = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 

@@ -30,7 +30,14 @@ DISCORD_CLIENT_SECRET=
 DISCORD_REDIRECT_URI=http://localhost:8000/auth/callback
 APP_BASE_URL=http://localhost:8000
 SESSION_SECRET=change-this-secret
+# Producción HTTPS: cookies de sesión seguras
+# ENV=production
+# SESSION_HTTPS_ONLY=1
 DATABASE_PATH=stickbot.db
+GIT_AUTO_SYNC=0
+GIT_AUTO_SYNC_REMOTE=origin
+GIT_AUTO_SYNC_BRANCH=main
+GIT_AUTO_SYNC_MESSAGE=auto-sync run_all
 ```
 
 ## 3) Instalacion local (sin Docker)
@@ -60,10 +67,10 @@ Servicios:
 2. Invitar bot al servidor.
 3. Login Discord desde el panel.
 4. Elegir servidor (guild).
-5. Configurar:
-   - Manual: pegar IDs de canales/rol.
-   - Automatico: el bot crea categoria + canales + rol.
-6. Probar comandos en Discord.
+5. **Manage** por servidor (`/setup/{guild_id}`): General, canales, límites, políticas por comando, OCR/MMR, apariencia ANSI.
+   - Manual: pegar IDs de canales/rol o usar validación API (`POST /api/guilds/{id}/config/validate`).
+   - Automático: el bot crea categoría + canales + rol.
+6. Probar comandos en Discord según políticas (`enabled` / `require_channel` / CSV).
 
 ## 6) Comandos de bot
 
@@ -82,8 +89,20 @@ Slash commands principales:
 - `python scripts/start.py`
 - `python scripts/backup.py`
 - `python run_all.py` (web + bot juntos)
+- `GIT_AUTO_SYNC=1 python run_all.py` (auto add/commit/push en inicio)
 
-## 8) Notas
+## 8) API de gestión (resumen)
 
-- Se mantiene la logica central de MMR/OCR del bot original.
+- `GET /health` — estado del despliegue, token bot, OAuth, muestra opcional de último error OCR en BD.
+- `GET /api/guilds` — requiere sesión OAuth; lista guilds del usuario.
+- `GET/PUT /api/guilds/{guild_id}/config` — lectura/escritura de `guild_config`.
+- `POST /api/guilds/{guild_id}/config/validate` — comprueba IDs de canal contra Discord (token del **bot**).
+
+## 9) Notas
+
+- MMR usa `mmr_k_factor` y `host_penalty_percent` por servidor.
+- OCR usa márgenes, umbrales de confianza y distancia de color configurables; **nunca** se puntúa partida sin pasar por imagen → OCR.
+- Mensajes ANSI (`ansi_enabled`, `ansi_preset`): mejor soporte en Discord escritorio.
+- Nunca commitear `.env` ni exponer token/secret en el panel.
 - `docs/current_logic_spec.md` documenta el comportamiento baseline.
+- `docs/qa_checklist.md` lista pruebas de regresión recomendadas.

@@ -1,50 +1,35 @@
+import sqlite3
+
 from app.db import get_connection
+from app.guild_config_defaults import default_guild_config_dict
 
 
 class GuildConfigRepository:
-    def get(self, guild_id: str):
+    def get(self, guild_id: str) -> dict | None:
         with get_connection() as conn:
-            return conn.execute(
-                """
-                SELECT guild_id, channel_buzon_id, channel_registro_id, channel_historial_id,
-                       channel_general_id, channel_busqueda_id, role_buscando_id,
-                       cooldown_minutes, daily_limit, auto_mode
-                FROM guild_config
-                WHERE guild_id = ?
-                """,
-                (guild_id,),
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM guild_config WHERE guild_id = ?",
+                (str(guild_id),),
             ).fetchone()
+            if not row:
+                return None
+            return dict(row)
 
-    def upsert(self, guild_id: str, payload: dict):
+    def upsert(self, guild_id: str, payload: dict) -> None:
+        base = default_guild_config_dict(str(guild_id))
+        merged = {**base, **payload}
+        merged["guild_id"] = str(guild_id)
+
         with get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO guild_config (
-                    guild_id, channel_buzon_id, channel_registro_id, channel_historial_id,
-                    channel_general_id, channel_busqueda_id, role_buscando_id,
-                    cooldown_minutes, daily_limit, auto_mode
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(guild_id) DO UPDATE SET
-                    channel_buzon_id=excluded.channel_buzon_id,
-                    channel_registro_id=excluded.channel_registro_id,
-                    channel_historial_id=excluded.channel_historial_id,
-                    channel_general_id=excluded.channel_general_id,
-                    channel_busqueda_id=excluded.channel_busqueda_id,
-                    role_buscando_id=excluded.role_buscando_id,
-                    cooldown_minutes=excluded.cooldown_minutes,
-                    daily_limit=excluded.daily_limit,
-                    auto_mode=excluded.auto_mode
-                """,
-                (
-                    guild_id,
-                    payload.get("channel_buzon_id"),
-                    payload.get("channel_registro_id"),
-                    payload.get("channel_historial_id"),
-                    payload.get("channel_general_id"),
-                    payload.get("channel_busqueda_id"),
-                    payload.get("role_buscando_id"),
-                    payload.get("cooldown_minutes"),
-                    payload.get("daily_limit"),
-                    payload.get("auto_mode", 0),
-                ),
-            )
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(guild_config)").fetchall()]
+            values = []
+            for col in cols:
+                if col not in merged:
+                    values.append(base.get(col))
+                else:
+                    values.append(merged[col])
+            placeholders = ",".join(["?"] * len(cols))
+            col_list = ",".join(cols)
+            sql = f"INSERT OR REPLACE INTO guild_config ({col_list}) VALUES ({placeholders})"
+            conn.execute(sql, values)

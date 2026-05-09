@@ -2,9 +2,34 @@ import signal
 import subprocess
 import sys
 import time
+import os
+
+
+def git_auto_sync():
+    if os.getenv("GIT_AUTO_SYNC", "0") != "1":
+        return
+    remote = os.getenv("GIT_AUTO_SYNC_REMOTE", "origin")
+    branch = os.getenv("GIT_AUTO_SYNC_BRANCH", "main")
+    message = os.getenv("GIT_AUTO_SYNC_MESSAGE", "auto-sync: run_all startup")
+    try:
+        subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        print("GIT_AUTO_SYNC=1 pero este directorio no es repo git.")
+        return
+
+    try:
+        subprocess.run(["git", "add", "."], check=False)
+        status = subprocess.run(["git", "status", "--porcelain"], check=True, capture_output=True, text=True)
+        if status.stdout.strip():
+            subprocess.run(["git", "commit", "-m", message], check=False)
+        subprocess.run(["git", "push", remote, branch], check=False)
+        print("Auto-sync git ejecutado.")
+    except Exception as exc:
+        print(f"Auto-sync git fallo: {exc}")
 
 
 def main():
+    git_auto_sync()
     web_proc = subprocess.Popen([sys.executable, "run_web.py"])
     bot_proc = subprocess.Popen([sys.executable, "run_bot.py"])
     procs = [web_proc, bot_proc]

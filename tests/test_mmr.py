@@ -15,3 +15,11 @@ def test_higher_score_gets_positive_mmr():
     cambios = calcular_cambios_mmr(resultados, mmr)
     assert cambios["A"] > 0
     assert cambios["B"] < 0
+
+
+def test_k_factor_scales_linearly():
+    resultados = {"A": 50, "B": 20}
+    mmr = {"A": 400.0, "B": 400.0}
+    c16 = calcular_cambios_mmr(resultados, mmr, k_factor=16.0)
+    c32 = calcular_cambios_mmr(resultados, mmr, k_factor=32.0)
+    assert abs(c32["A"] - 2 * c16["A"]) < 1e-6

@@ -1,12 +1,32 @@
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Seleccionar Servidor</title></head>
-<body>
-  <h2>Selecciona un servidor</h2>
-  <ul>
+{% extends "base.html" %}
+{% block title %}Servidores — StickBot{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Servidores</h2>
+  <p class="muted">Elegí un servidor para abrir Manage (configuración completa).</p>
+  <label for="srv-q" class="muted">Búsqueda rápida</label>
+  <input id="srv-q" type="search" placeholder="Filtrar por nombre..." autocomplete="off" style="max-width:100%">
+  <ul id="srv-list" style="margin-top:12px;padding-left:20px;">
     {% for g in guilds %}
-      <li><a href="/setup/{{ g.id }}">{{ g.name }}</a></li>
+      <li data-name="{{ g.name|lower }}"><a href="/setup/{{ g.id }}">{{ g.name }}</a></li>
     {% endfor %}
   </ul>
-</body>
-</html>
+  <p class="muted"><a href="/">Volver al inicio</a></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var q = document.getElementById('srv-q');
+  var list = document.getElementById('srv-list');
+  if (!q || !list) return;
+  q.addEventListener('input', function(){
+    var term = (q.value || '').toLowerCase().trim();
+    list.querySelectorAll('li').forEach(function(li){
+      var n = li.getAttribute('data-name') || '';
+      li.style.display = !term || n.indexOf(term) !== -1 ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

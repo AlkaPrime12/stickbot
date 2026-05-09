@@ -1,5 +1,10 @@
 import sqlite3
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from app.db_migrations import ensure_guild_config_extended_columns
+
 
 def inicializar_db():
     # Esto crea el archivo stickbot.db automáticamente si no existe
@@ -59,7 +64,39 @@ def inicializar_db():
             role_buscando_id TEXT,
             cooldown_minutes INTEGER DEFAULT 22,
             daily_limit INTEGER DEFAULT 3,
-            auto_mode INTEGER DEFAULT 0
+            auto_mode INTEGER DEFAULT 0,
+            timezone TEXT DEFAULT 'UTC',
+            language TEXT DEFAULT 'es',
+            cmd_registrar_enabled INTEGER DEFAULT 1,
+            cmd_registrar_require_channel INTEGER DEFAULT 0,
+            cmd_registrar_allowed_channels TEXT DEFAULT '',
+            cmd_renombrar_enabled INTEGER DEFAULT 1,
+            cmd_renombrar_require_channel INTEGER DEFAULT 0,
+            cmd_renombrar_allowed_channels TEXT DEFAULT '',
+            cmd_perfil_enabled INTEGER DEFAULT 1,
+            cmd_perfil_require_channel INTEGER DEFAULT 0,
+            cmd_perfil_allowed_channels TEXT DEFAULT '',
+            cmd_stickleaderboard_enabled INTEGER DEFAULT 1,
+            cmd_stickleaderboard_require_channel INTEGER DEFAULT 0,
+            cmd_stickleaderboard_allowed_channels TEXT DEFAULT '',
+            cmd_partida_enabled INTEGER DEFAULT 1,
+            cmd_partida_require_channel INTEGER DEFAULT 0,
+            cmd_partida_allowed_channels TEXT DEFAULT '',
+            ansi_enabled INTEGER DEFAULT 1,
+            ocr_confidence_threshold REAL DEFAULT 0.25,
+            ocr_min_points INTEGER DEFAULT 30,
+            host_penalty_percent REAL DEFAULT 8.0,
+            guild_display_name TEXT DEFAULT '',
+            limits_apply_non_admin_only INTEGER DEFAULT 0,
+            bot_admin_ids TEXT DEFAULT '',
+            mmr_k_factor REAL DEFAULT 32.0,
+            partida_confirm_reaction INTEGER DEFAULT 0,
+            ocr_margin_percent REAL DEFAULT 20.0,
+            ocr_center_confidence REAL DEFAULT 0.25,
+            ocr_corner_confidence REAL DEFAULT 0.10,
+            ocr_color_distance_max REAL DEFAULT 170.0,
+            last_ocr_error TEXT,
+            ansi_preset TEXT DEFAULT 'default'
         )
     ''')
 
@@ -95,6 +132,7 @@ def inicializar_db():
 
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_limite_fecha ON limite_diario(fecha)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_setup_runs_guild ON setup_runs(guild_id)')
+    ensure_guild_config_extended_columns(conexion)
     conexion.commit()
     conexion.close()
     print("¡Base de datos estructurada y lista para guardar los puntajes!")

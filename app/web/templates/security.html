@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Seguridad — StickBot{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Seguridad</h2>
+  <ul class="muted">
+    <li>OAuth2 usa parámetro <code>state</code> para prevenir CSRF en el callback.</li>
+    <li>No expongas <code>DISCORD_TOKEN</code>, <code>DISCORD_CLIENT_SECRET</code> ni <code>SESSION_SECRET</code> en el panel ni en repositorios.</li>
+    <li>En producción HTTPS: establece <code>ENV=production</code> o <code>SESSION_HTTPS_ONLY=1</code> para cookies de sesión seguras (<code>Secure</code>).</li>
+    <li>Cookie session actual: <strong>{% if session_https %}Secure (HTTPS only){% else %}desarrollo (HTTP permitido){% endif %}</strong></li>
+    <li>Alinea <code>DISCORD_REDIRECT_URI</code> y <code>APP_BASE_URL</code> con la URL pública del panel.</li>
+  </ul>
+</div>
+{% endblock %}

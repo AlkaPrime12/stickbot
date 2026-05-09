@@ -1,25 +1,170 @@
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Configurar Guild</title></head>
-<body>
-  <h2>Configuracion del servidor {{ guild_id }}</h2>
+{% extends "base.html" %}
+{% block title %}Manage — {{ guild_id }}{% endblock %}
+{% block head_extra %}
+<style>
+  .manage-section { margin-bottom: 20px; }
+  .manage-section h4 {
+    margin: 0 0 8px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #334155;
+    font-size: 1rem;
+  }
+  .manage-section.hidden { display: none !important; }
+  #manage-search { max-width: 100%; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; max-width: 720px; }
+  @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Manage — servidor <code>{{ guild_id }}</code></h2>
+  <p class="muted"><a href="/setup">← Servidores</a> · <a href="/overview#ocr">OCR / Partidas</a> · Redirect OAuth: <code>{{ discord_redirect_uri }}</code></p>
+  <label for="manage-search">Buscar en Manage</label>
+  <input id="manage-search" type="search" placeholder="general, ocr, ansi, comando..." autocomplete="off">
+</div>
 
-  <h3>Manual</h3>
-  <form method="post" action="/setup/{{ guild_id }}/manual">
-    <label>Canal Buzon ID <input name="channel_buzon_id" value="{{ config.channel_buzon_id or '' }}"></label><br>
-    <label>Canal Registro ID <input name="channel_registro_id" value="{{ config.channel_registro_id or '' }}"></label><br>
-    <label>Canal Historial ID <input name="channel_historial_id" value="{{ config.channel_historial_id or '' }}"></label><br>
-    <label>Canal General ID <input name="channel_general_id" value="{{ config.channel_general_id or '' }}"></label><br>
-    <label>Canal Busqueda ID <input name="channel_busqueda_id" value="{{ config.channel_busqueda_id or '' }}"></label><br>
-    <label>Rol Buscando ID <input name="role_buscando_id" value="{{ config.role_buscando_id or '' }}"></label><br>
-    <label>Cooldown (min) <input name="cooldown_minutes" type="number" value="{{ config.cooldown_minutes }}"></label><br>
-    <label>Limite diario <input name="daily_limit" type="number" value="{{ config.daily_limit }}"></label><br>
-    <button type="submit">Guardar manual</button>
+<div class="card">
+  <form method="post" action="/setup/{{ guild_id }}/manual" id="manage-form">
+    <div class="manage-section" data-tags="general nombre display idioma zona">
+      <h4>General</h4>
+      <div class="grid-2">
+        <div>
+          <label>Nombre para mostrar (local)</label>
+          <input name="guild_display_name" value="{{ config.guild_display_name or '' }}" placeholder="Opcional">
+        </div>
+        <div>
+          <label>Timezone</label>
+          <input name="timezone" value="{{ config.timezone or 'UTC' }}">
+        </div>
+        <div>
+          <label>Idioma</label>
+          <input name="language" value="{{ config.language or 'es' }}">
+        </div>
+      </div>
+    </div>
+
+    <div class="manage-section" data-tags="canales channel ids discord">
+      <h4>Canales</h4>
+      <p class="muted">IDs numéricos de canal. Validación vía <code>POST /api/guilds/{{ guild_id }}/config/validate</code> (requiere token del bot).</p>
+      <label>Canal Buzón ID</label><input name="channel_buzon_id" value="{{ config.channel_buzon_id or '' }}">
+      <label>Canal Registro ID</label><input name="channel_registro_id" value="{{ config.channel_registro_id or '' }}">
+      <label>Canal Historial ID</label><input name="channel_historial_id" value="{{ config.channel_historial_id or '' }}">
+      <label>Canal General ID</label><input name="channel_general_id" value="{{ config.channel_general_id or '' }}">
+      <label>Canal Búsqueda ID</label><input name="channel_busqueda_id" value="{{ config.channel_busqueda_id or '' }}">
+    </div>
+
+    <div class="manage-section" data-tags="roles limites admin cooldown daily">
+      <h4>Roles y límites</h4>
+      <label>Rol Buscando ID</label><input name="role_buscando_id" value="{{ config.role_buscando_id or '' }}">
+      <label>Cooldown (min)</label><input name="cooldown_minutes" type="number" value="{{ config.cooldown_minutes }}">
+      <label>Límite diario</label><input name="daily_limit" type="number" value="{{ config.daily_limit }}">
+      <label>Límites solo no-admin (1/0)</label><input name="limits_apply_non_admin_only" type="number" min="0" max="1" value="{{ config.limits_apply_non_admin_only|default(0) }}">
+      <label>Bot admin IDs (CSV Discord user ids)</label><input name="bot_admin_ids" value="{{ config.bot_admin_ids or '' }}" placeholder="123,456">
+    </div>
+
+    <div class="manage-section" data-tags="comandos policy require channel allowed slash">
+      <h4>Comandos (enabled / require_channel / CSV canales)</h4>
+      <p class="muted">Si require_channel=0, sin restricción. Si 1 y CSV vacío, se usa el canal principal de la sección.</p>
+
+      <h5 style="margin:12px 0 6px;color:#94a3b8">/registrar</h5>
+      <label>enabled</label><input name="cmd_registrar_enabled" type="number" min="0" max="1" value="{{ config.cmd_registrar_enabled }}">
+      <label>require_channel</label><input name="cmd_registrar_require_channel" type="number" min="0" max="1" value="{{ config.cmd_registrar_require_channel }}">
+      <label>allowed channels (CSV)</label><input name="cmd_registrar_allowed_channels" value="{{ config.cmd_registrar_allowed_channels or '' }}">
+
+      <h5 style="margin:12px 0 6px;color:#94a3b8">/renombrar</h5>
+      <label>enabled</label><input name="cmd_renombrar_enabled" type="number" min="0" max="1" value="{{ config.cmd_renombrar_enabled }}">
+      <label>require_channel</label><input name="cmd_renombrar_require_channel" type="number" min="0" max="1" value="{{ config.cmd_renombrar_require_channel }}">
+      <label>allowed channels (CSV)</label><input name="cmd_renombrar_allowed_channels" value="{{ config.cmd_renombrar_allowed_channels or '' }}">
+
+      <h5 style="margin:12px 0 6px;color:#94a3b8">/perfil</h5>
+      <label>enabled</label><input name="cmd_perfil_enabled" type="number" min="0" max="1" value="{{ config.cmd_perfil_enabled }}">
+      <label>require_channel</label><input name="cmd_perfil_require_channel" type="number" min="0" max="1" value="{{ config.cmd_perfil_require_channel }}">
+      <label>allowed channels (CSV)</label><input name="cmd_perfil_allowed_channels" value="{{ config.cmd_perfil_allowed_channels or '' }}">
+
+      <h5 style="margin:12px 0 6px;color:#94a3b8">/stickleaderboard</h5>
+      <label>enabled</label><input name="cmd_stickleaderboard_enabled" type="number" min="0" max="1" value="{{ config.cmd_stickleaderboard_enabled }}">
+      <label>require_channel</label><input name="cmd_stickleaderboard_require_channel" type="number" min="0" max="1" value="{{ config.cmd_stickleaderboard_require_channel }}">
+      <label>allowed channels (CSV)</label><input name="cmd_stickleaderboard_allowed_channels" value="{{ config.cmd_stickleaderboard_allowed_channels or '' }}">
+
+      <h5 style="margin:12px 0 6px;color:#94a3b8">/partida</h5>
+      <label>enabled</label><input name="cmd_partida_enabled" type="number" min="0" max="1" value="{{ config.cmd_partida_enabled }}">
+      <label>require_channel</label><input name="cmd_partida_require_channel" type="number" min="0" max="1" value="{{ config.cmd_partida_require_channel }}">
+      <label>allowed channels (CSV)</label><input name="cmd_partida_allowed_channels" value="{{ config.cmd_partida_allowed_channels or '' }}">
+    </div>
+
+    <div class="manage-section" data-tags="ocr partida imagen confianza color margin puntos host mmr k">
+      <h4>OCR / Partidas / MMR</h4>
+      <label>ocr_min_points</label><input name="ocr_min_points" type="number" value="{{ config.ocr_min_points }}">
+      <label>ocr_confidence_threshold (compat / min centro)</label><input name="ocr_confidence_threshold" type="number" step="0.01" value="{{ config.ocr_confidence_threshold }}">
+      <label>ocr_margin_percent</label><input name="ocr_margin_percent" type="number" step="0.1" value="{{ config.ocr_margin_percent|default(20) }}">
+      <label>ocr_center_confidence</label><input name="ocr_center_confidence" type="number" step="0.01" value="{{ config.ocr_center_confidence|default(0.25) }}">
+      <label>ocr_corner_confidence</label><input name="ocr_corner_confidence" type="number" step="0.01" value="{{ config.ocr_corner_confidence|default(0.10) }}">
+      <label>ocr_color_distance_max</label><input name="ocr_color_distance_max" type="number" step="0.1" value="{{ config.ocr_color_distance_max|default(170) }}">
+      <label>host_penalty_percent</label><input name="host_penalty_percent" type="number" step="0.1" value="{{ config.host_penalty_percent }}">
+      <label>mmr_k_factor</label><input name="mmr_k_factor" type="number" step="0.1" value="{{ config.mmr_k_factor|default(32) }}">
+      <label>partida_confirm_reaction (1=añade ✅ al mensaje)</label><input name="partida_confirm_reaction" type="number" min="0" max="1" value="{{ config.partida_confirm_reaction|default(0) }}">
+    </div>
+
+    <div class="manage-section" data-tags="ansi apariencia colores preset mensajes">
+      <h4>Apariencia de mensajes (ANSI)</h4>
+      <p class="muted">```ansi``` funciona principalmente en Discord escritorio. Desactiva si prefieres texto plano.</p>
+      <label>ansi_enabled (1/0)</label><input name="ansi_enabled" type="number" min="0" max="1" value="{{ config.ansi_enabled }}">
+      <label>preset</label>
+      <select name="ansi_preset">
+        {% for p in ['default','high_contrast','muted','mono'] %}
+          <option value="{{ p }}" {% if (config.ansi_preset or 'default') == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="manage-section" data-tags="diagnostico error ocr last">
+      <h4>Diagnóstico</h4>
+      <p class="muted">Último error OCR (solo lectura, actualizado por el bot)</p>
+      <pre style="background:#0b1220;padding:10px;border-radius:8px;white-space:pre-wrap;">{% if config.last_ocr_error %}{{ config.last_ocr_error }}{% else %}(ninguno){% endif %}</pre>
+    </div>
+
+    <button type="submit">Guardar Manage</button>
   </form>
+</div>
 
-  <h3>Automatico</h3>
+<div class="card">
+  <h3>Automático</h3>
+  <p class="muted">Crea canales y rol necesarios (requiere permisos del bot).</p>
   <form method="post" action="/setup/{{ guild_id }}/auto">
-    <button type="submit">Configurar automatico</button>
+    <button type="submit">Configurar automático</button>
   </form>
-</body>
-</html>
+</div>
+
+<div class="card">
+  <h3>Validar canales (API)</h3>
+  <p class="muted">Desde la consola del navegador ( sesión iniciada ) o herramienta HTTP:</p>
+  <pre style="background:#0b1220;padding:10px;border-radius:8px;font-size:0.8rem;overflow:auto;">POST /api/guilds/{{ guild_id }}/config/validate
+Content-Type: application/json
+Body: mismos campos que guardes (channel_* y cmd_*_allowed_channels)</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var search = document.getElementById('manage-search');
+  if (search) {
+    search.addEventListener('input', function(){
+      var q = (search.value || '').toLowerCase().trim();
+      document.querySelectorAll('.manage-section').forEach(function(sec){
+        var tags = (sec.getAttribute('data-tags') || '') + ' ' + (sec.innerText || '').toLowerCase();
+        if (!q || tags.indexOf(q) !== -1) sec.classList.remove('hidden');
+        else sec.classList.add('hidden');
+      });
+    });
+  }
+  {% if saved %}
+  var toast = document.getElementById('toast');
+  if (toast) {
+    toast.classList.add('show');
+    setTimeout(function(){ toast.classList.remove('show'); }, 4200);
+  }
+  {% endif %}
+})();
+</script>
+{% endblock %}

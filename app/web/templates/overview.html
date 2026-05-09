@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Overview — StickBot{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Overview</h2>
+  <p class="muted">Estado del panel, OAuth y diagnóstico mínimo.</p>
+  <ul class="muted">
+    <li>Bot token: {% if health.bot_token_configured %}<strong style="color:#86efac">configurado</strong>{% else %}<strong style="color:#fca5a5">falta</strong>{% endif %}</li>
+    <li>OAuth client (id+secret): {% if health.oauth_client_configured %}<strong style="color:#86efac">ok</strong>{% else %}<strong style="color:#fca5a5">incompleto</strong>{% endif %}</li>
+    <li>Redirect URI: <code>{{ health.oauth_redirect_uri }}</code></li>
+    <li>APP_BASE_URL: <code>{{ health.app_base_url }}</code></li>
+    <li>Session secret fuerte: {% if health.session_secret_strong %}sí{% else %}<strong style="color:#fbbf24">cambiar SESSION_SECRET</strong>{% endif %}</li>
+  </ul>
+  <p><a href="{{ invite_url }}">Invitar bot</a> · <a href="/auth/login">Login Discord</a></p>
+</div>
+
+<div class="card" id="ocr">
+  <h2>OCR / Partidas</h2>
+  <p class="muted">El flujo innegociable en el bot: imagen → OCR → validación (puntos mínimos / confianza) → MMR. Ajusta parámetros en <a href="/setup">Manage</a> por servidor.</p>
+  {% if health.sample_last_ocr_error %}
+    <p><strong>Último error OCR (muestra de BD):</strong></p>
+    <pre style="background:#0b1220;padding:10px;border-radius:8px;overflow:auto;font-size:0.85rem;">Guild {{ health.sample_last_ocr_error.guild_id }}
+{{ health.sample_last_ocr_error.message }}</pre>
+  {% else %}
+    <p class="muted">No hay errores OCR recientes registrados en guild_config.</p>
+  {% endif %}
+</div>
+{% endblock %}
