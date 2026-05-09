@@ -1,19 +1,35 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+def _resolve_public_base_url() -> str:
+    """
+    URL pública de la app (sin barra final).
+    1) APP_BASE_URL si está definido
+    2) Railway: https:// + RAILWAY_PUBLIC_DOMAIN (la da Railway cuando el servicio tiene dominio)
+    3) localhost para desarrollo
+    """
+    explicit = (os.getenv("APP_BASE_URL") or "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    rail = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip()
+    if rail:
+        return f"https://{rail}"
+    return "http://localhost:8000"
+
+
 def _derived_redirect_uri() -> str:
     """
-    Si DISCORD_REDIRECT_URI no está definido, usar APP_BASE_URL + /auth/callback
-    (evita OAuth en producción con redirect localhost por defecto).
+    Si DISCORD_REDIRECT_URI no está definido: base pública + /auth/callback.
+    En Railway suele bastar con no definir nada y tener dominio público + la misma URL en Discord.
     """
     explicit = (os.getenv("DISCORD_REDIRECT_URI") or "").strip()
     if explicit:
         return explicit.rstrip("/")
-    base = (os.getenv("APP_BASE_URL") or "http://localhost:8000").strip().rstrip("/")
+    base = _resolve_public_base_url()
     return f"{base}/auth/callback"
 
 
@@ -22,8 +38,8 @@ class Settings:
     discord_token: str = os.getenv("DISCORD_TOKEN", "")
     discord_client_id: str = os.getenv("DISCORD_CLIENT_ID", "")
     discord_client_secret: str = os.getenv("DISCORD_CLIENT_SECRET", "")
-    discord_redirect_uri: str = _derived_redirect_uri()
-    app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
+    discord_redirect_uri: str = field(default_factory=_derived_redirect_uri)
+    app_base_url: str = field(default_factory=_resolve_public_base_url)
     database_path: str = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "stickbot.db"))
     session_secret: str = os.getenv("SESSION_SECRET", "change-this-session-secret")
     default_daily_limit: int = int(os.getenv("DEFAULT_DAILY_LIMIT", "3"))
