@@ -29,8 +29,14 @@ def ensure_guild_scoped_mmr(conn: sqlite3.Connection) -> None:
     if n > 0:
         return
 
-    j_rows = conn.execute("SELECT id_jugador, mmr FROM jugadores").fetchall()
-    g_rows = [r[0] for r in conn.execute("SELECT guild_id FROM guild_config").fetchall()]
+    try:
+        j_rows = conn.execute("SELECT id_jugador, mmr FROM jugadores").fetchall()
+    except sqlite3.OperationalError:
+        j_rows = []
+    try:
+        g_rows = [r[0] for r in conn.execute("SELECT guild_id FROM guild_config").fetchall()]
+    except sqlite3.OperationalError:
+        g_rows = []
     if g_rows and j_rows:
         for gid in g_rows:
             for uid, mmr in j_rows:

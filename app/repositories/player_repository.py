@@ -137,7 +137,7 @@ class PlayerRepository:
                         WHEN gs.guild_id = '_legacy_' THEN 'Legacy'
                         ELSE COALESCE(NULLIF(TRIM(gc.guild_display_name), ''), gs.guild_id)
                     END AS gname,
-                    j.nombre_juego, gs.mmr
+                    j.nombre_juego, COALESCE(gs.mmr, 400.0) AS mmr
                 FROM guild_player_stats gs
                 JOIN jugadores j ON j.id_jugador = gs.discord_user_id
                 LEFT JOIN guild_config gc ON gc.guild_id = gs.guild_id

@@ -5,12 +5,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _derived_redirect_uri() -> str:
+    """
+    Si DISCORD_REDIRECT_URI no está definido, usar APP_BASE_URL + /auth/callback
+    (evita OAuth en producción con redirect localhost por defecto).
+    """
+    explicit = (os.getenv("DISCORD_REDIRECT_URI") or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    base = (os.getenv("APP_BASE_URL") or "http://localhost:8000").strip().rstrip("/")
+    return f"{base}/auth/callback"
+
+
 @dataclass
 class Settings:
     discord_token: str = os.getenv("DISCORD_TOKEN", "")
     discord_client_id: str = os.getenv("DISCORD_CLIENT_ID", "")
     discord_client_secret: str = os.getenv("DISCORD_CLIENT_SECRET", "")
-    discord_redirect_uri: str = os.getenv("DISCORD_REDIRECT_URI", "http://localhost:8000/auth/callback")
+    discord_redirect_uri: str = _derived_redirect_uri()
     app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
     database_path: str = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "stickbot.db"))
     session_secret: str = os.getenv("SESSION_SECRET", "change-this-session-secret")

@@ -7,17 +7,46 @@
   <p><a href="/auth/login">Login con Discord</a></p>
 </div>
 {% endif %}
+{% if login_error %}
+<div class="card" style="border-color:#b45309;background:#1c1917">
+  {% if login_error == 'bad_state' %}
+  <p><strong>El enlace de Discord expiró o no coincide con esta pestaña.</strong> No uses un enlace guardado: hacé clic en <a href="/auth/login">Login con Discord</a> desde esta página.</p>
+  {% elif login_error == 'token_exchange_failed' %}
+  <p><strong>No se pudo completar el login con Discord.</strong> Revisá <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_REDIRECT_URI</code> (debe coincidir exacto en el Portal de Discord con este redirect: <code>{{ redirect_uri_hint }}</code>) y que el servidor web esté en la misma URL base.</p>
+  <p><a href="/auth/login">Reintentar Login con Discord</a></p>
+  {% elif login_error == 'missing_code' %}
+  <p><strong>Faltó el código de autorización.</strong> Empezá de nuevo con <a href="/auth/login">Login con Discord</a>.</p>
+  {% elif login_error == 'no_oauth_config' %}
+  <p><strong>Faltan credenciales OAuth en el servidor.</strong> Configurá <code>DISCORD_CLIENT_ID</code> y <code>DISCORD_CLIENT_SECRET</code> en el entorno.</p>
+  {% elif login_error == 'discord_error' %}
+  <p><strong>Discord rechazó o canceló el acceso.</strong> {% if login_detail %}<span class="muted">{{ login_detail }}</span>{% endif %}</p>
+  <p><a href="/auth/login">Login con Discord</a></p>
+  {% else %}
+  <p><strong>Problema al iniciar sesión.</strong> Código: {{ login_error }} {% if login_detail %}— {{ login_detail }}{% endif %}</p>
+  <p><a href="/auth/login">Login con Discord</a></p>
+  {% endif %}
+</div>
+{% endif %}
+{% if not oauth_configured %}
+<div class="card muted">
+  <p>OAuth no está configurado en el servidor (<code>DISCORD_CLIENT_ID</code> / <code>DISCORD_CLIENT_SECRET</code>). El login no funcionará hasta configurarlos.</p>
+</div>
+{% endif %}
 <div class="card">
   <h2>StickBot Dashboard</h2>
-  <p class="muted">Panel: Overview, Manage por servidor, OCR y mensajes ANSI.</p>
+  <p class="muted">Panel: Overview, Manage por servidor (preferencias del bot), OCR y mensajes ANSI.</p>
   <p><a href="{{ invite_url }}">Invitar bot al servidor</a></p>
 </div>
 {% if user %}
   <div class="card">
     <p>Conectado como <strong>{{ user.username }}</strong></p>
+    <p class="muted">Pasos: <strong><a href="/setup">Servidores</a></strong> → elegí un guild → <strong>Manage</strong> (todas las preferencias por servidor).</p>
     <p><a href="/overview">Overview</a> · <a href="/leaderboard">Leaderboard global</a> · <a href="/setup">Servidores / Manage</a></p>
+    {% if oauth_logged_in %}
+    <p class="muted small">Sesión OAuth activa; si no ves servidores en /setup, necesitás permisos de administrador en un servidor donde esté el bot.</p>
+    {% endif %}
   </div>
 {% else %}
-  <div class="card"><p><a href="/auth/login">Login con Discord</a></p></div>
+  <div class="card"><p>Para ver y editar preferencias por servidor: <a href="/auth/login">Login con Discord</a> (usá siempre este botón, no un enlace copiado de Discord).</p></div>
 {% endif %}
 {% endblock %}

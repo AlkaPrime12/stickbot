@@ -6,10 +6,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.db_migrations import ensure_all_post_schema
 
 
-def inicializar_db():
+def inicializar_db(database_path: str | None = None):
     # Esto crea el archivo stickbot.db automáticamente si no existe
     directorio_base = os.path.dirname(os.path.abspath(__file__))
-    ruta_db = os.path.join(directorio_base, 'stickbot.db')
+    ruta_db = database_path if database_path else os.path.join(directorio_base, "stickbot.db")
+    db_dir = os.path.dirname(ruta_db)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conexion = sqlite3.connect(ruta_db)
     cursor = conexion.cursor()
 

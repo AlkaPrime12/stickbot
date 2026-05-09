@@ -1,6 +1,7 @@
 import os
 import secrets
-from urllib.parse import urlencode
+from contextlib import asynccontextmanager
+from urllib.parse import quote, urlencode
 
 import httpx
 from fastapi import FastAPI, Request, Form
@@ -18,13 +19,33 @@ from app.services.message_template_service import MessageTemplateService
 
 
 def _session_https_only() -> bool:
-    return os.getenv("SESSION_HTTPS_ONLY", "").lower() in ("1", "true", "yes") or os.getenv("ENV", "").lower() in (
-        "production",
-        "prod",
-    )
+    """
+    Cookies Secure: solo con HTTPS. En http://localhost NO usar Secure o el navegador no guarda sesión.
+    Forzar: SESSION_HTTPS_ONLY=1 en producción con URL https.
+    Desarrollo local: SESSION_ALLOW_HTTP_COOKIES=1 (por defecto activa si APP_BASE_URL es localhost).
+    """
+    if os.getenv("SESSION_ALLOW_HTTP_COOKIES", "").lower() in ("1", "true", "yes"):
+        return False
+    if os.getenv("SESSION_HTTPS_ONLY", "").lower() in ("1", "true", "yes"):
+        return True
+    if os.getenv("SESSION_HTTPS_ONLY", "").lower() in ("0", "false", "no"):
+        return False
+    base = (settings.app_base_url or "").lower()
+    if "localhost" in base or "127.0.0.1" in base:
+        return False
+    return os.getenv("ENV", "").lower() in ("production", "prod")
 
 
-app = FastAPI(title="StickBot Setup Panel")
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Misma BD que el bot: crea tablas y migraciones al levantar el panel (Railway / Docker)."""
+    from database import inicializar_db
+
+    inicializar_db(settings.database_path)
+    yield
+
+
+app = FastAPI(title="StickBot Setup Panel", lifespan=_lifespan)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
@@ -140,6 +161,7 @@ async def home(request: Request):
     request.session.pop("guilds", None)
     user = request.session.get("user")
     login_msg = request.query_params.get("login")
+    oauth_logged_in = bool(request.session.get("oauth_token"))
     return templates.TemplateResponse(
         name="home.html",
         context={
@@ -147,6 +169,11 @@ async def home(request: Request):
             "user": user,
             "invite_url": _bot_invite_url(),
             "session_expired": login_msg == "expired",
+            "login_error": login_msg if login_msg and login_msg not in ("expired",) else None,
+            "login_detail": request.query_params.get("detail", ""),
+            "oauth_logged_in": oauth_logged_in,
+            "redirect_uri_hint": settings.discord_redirect_uri,
+            "oauth_configured": bool(settings.discord_client_id and settings.discord_client_secret),
         },
         request=request,
     )
@@ -209,6 +236,8 @@ async def security_page(request: Request):
 
 @app.get("/auth/login")
 async def auth_login(request: Request):
+    if not settings.discord_client_id or not settings.discord_client_secret:
+        return RedirectResponse("/?login=no_oauth_config")
     state = secrets.token_urlsafe(24)
     request.session["oauth_state"] = state
     params = urlencode(
@@ -225,33 +254,53 @@ async def auth_login(request: Request):
 
 
 @app.get("/auth/callback")
-async def auth_callback(request: Request, code: str, state: str):
-    if state != request.session.get("oauth_state"):
-        return JSONResponse({"error": "invalid_oauth_state"}, status_code=400)
+async def auth_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+):
+    if error:
+        detail = (error_description or error)[:300]
+        return RedirectResponse(f"/?login=discord_error&detail={quote(detail)}")
+    if not code:
+        return RedirectResponse("/?login=missing_code")
+    if not state or state != request.session.get("oauth_state"):
+        # Links guardados de Discord tienen un state viejo; siempre entrar desde "Login" en esta web.
+        return RedirectResponse("/?login=bad_state")
 
-    async with httpx.AsyncClient(timeout=20) as client:
-        token_resp = await client.post(
-            "https://discord.com/api/oauth2/token",
-            data={
-                "client_id": settings.discord_client_id,
-                "client_secret": settings.discord_client_secret,
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": settings.discord_redirect_uri,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        token_resp.raise_for_status()
-        token = token_resp.json()["access_token"]
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            token_resp = await client.post(
+                "https://discord.com/api/oauth2/token",
+                data={
+                    "client_id": settings.discord_client_id,
+                    "client_secret": settings.discord_client_secret,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": settings.discord_redirect_uri,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_resp.raise_for_status()
+            token = token_resp.json()["access_token"]
 
-        user_resp = await client.get("https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {token}"})
-        guilds_resp = await client.get("https://discord.com/api/users/@me/guilds", headers={"Authorization": f"Bearer {token}"})
-        user_resp.raise_for_status()
-        guilds_resp.raise_for_status()
+            user_resp = await client.get(
+                "https://discord.com/api/users/@me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            guilds_resp = await client.get(
+                "https://discord.com/api/users/@me/guilds",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            user_resp.raise_for_status()
+            guilds_resp.raise_for_status()
+    except Exception:
+        return RedirectResponse("/?login=token_exchange_failed")
 
     request.session["oauth_token"] = token
     request.session["user"] = user_resp.json()
-    # No guardar guilds en la sesión: la cookie tiene ~4KB y la lista ROMPE el límite.
     request.session.pop("guilds", None)
     return RedirectResponse("/setup")
 
